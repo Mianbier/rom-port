@@ -44,6 +44,19 @@ module.exports = {
    */
   romCdnBase: 'https://cdnorg.d.miui.com',
 
+  /**
+   * 官方镜像域名：同一个 ROM 文件挂在多个小米官方 CDN 上，任选其一都能下。
+   * 页面会把每个包的全部镜像都列出来（第一个作为主链接，cdnorg 实测可用）。
+   * 顺序 = 展示顺序；改这里不用动代码逻辑。
+   */
+  romCdnMirrors: [
+    { label: '小米官方', host: 'cdnorg.d.miui.com' },
+    { label: '小米官方 #2', host: 'bn.d.miui.com' },
+    { label: '小米官方 #3', host: 'bigota.d.miui.com' },
+    { label: '小米官方 #4', host: 'hugeota.d.miui.com' },
+    { label: '小米官方 #5（新加坡）', host: 'bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com' }
+  ],
+
   // 调用发布接口需要的管理令牌，自己随便改成一串别人猜不到的字符
   adminToken: 'change-this-to-a-random-token',
 

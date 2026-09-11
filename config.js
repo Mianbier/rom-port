@@ -10,11 +10,13 @@ module.exports = {
   appid: 'wx92e4a6d9589af1f6',
 
   // 小程序 AppSecret：在「微信公众平台 - 开发 - 开发管理 - 开发设置」里复制
-  // 注意：这是敏感信息，只放在你本地，切勿上传或分享
-  secret: '在这里填写你的 AppSecret',
+  // ⚠️ 敏感信息！不要写进代码、不要提交到 GitHub（仓库是公开的）
+  //    请配成环境变量 WX_SECRET，在云托管「服务设置 → 环境变量」里填
+  secret: process.env.WX_SECRET || '',
 
   // 订阅消息模板 ID：在「微信公众平台 - 功能 - 订阅消息」中申请一个模板后复制
-  templateId: '在这里填写订阅消息模板ID',
+  // 同样建议用环境变量 WX_TEMPLATE_ID
+  templateId: process.env.WX_TEMPLATE_ID || '',
 
   // 本地服务端口
   // 云托管会注入 PORT（模板默认 80）；本地开发没设 PORT 且没连 MySQL 时用 3000

@@ -123,33 +123,33 @@ function today() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+/**
+ * 数据源判定：机型 id 前缀 `xr-` 是 XiaomiROM 引进的数据，其余是本小程序的澎湃OS 数据。
+ * source='xr' 只返回 xiaomirom 的；其他（含空）返回澎湃OS 的。
+ */
+function matchSource(id, source) {
+  const isXr = String(id || '').indexOf('xr-') === 0
+  return source === 'xr' ? isXr : !isXr
+}
+
 /** 机型列表，附带系统包版本数、最近更新时间、可用移植包数量 */
-async function modelsWithCount() {
-  const [models, roms, ports] = await Promise.all([
+async function modelsWithCount(source) {
+  const [models, romStat, portCount] = await Promise.all([
     store.getModels(),
-    store.getRoms(),
-    store.getPorts()
+    store.romStats(),
+    store.portCounts()
   ])
-  const romStat = {}
-  roms.forEach((r) => {
-    const s = romStat[r.modelId] || (romStat[r.modelId] = { count: 0, latest: '' })
-    s.count++
-    if (r.release && r.release > s.latest) s.latest = r.release
-  })
-  const portCount = {}
-  ports.forEach((p) => {
-    // 有直链或分享链接才算可用，和小程序里的判断保持一致
-    if (p.modelId && (p.url || p.shareUrl)) portCount[p.modelId] = (portCount[p.modelId] || 0) + 1
-  })
-  return models.map((m) => {
-    const s = romStat[m.id]
-    return {
-      ...m,
-      romCount: s ? s.count : 0,
-      latestRelease: s ? s.latest : '',
-      portCount: portCount[m.id] || 0
-    }
-  })
+  return models
+    .filter((m) => matchSource(m.id, source))
+    .map((m) => {
+      const s = romStat[m.id]
+      return {
+        ...m,
+        romCount: s ? s.count : 0,
+        latestRelease: s ? s.latest : '',
+        portCount: portCount[m.id] || 0
+      }
+    })
 }
 
 /** 分支排序权重：正式版 > Beta > 开发版 > 演示机 > 政企 > 预览版 */
@@ -290,9 +290,9 @@ const server = http.createServer(async (req, res) => {
       })
     }
 
-    // 机型列表
+    // 机型列表（?source=xr 取 XiaomiROM 数据，默认取澎湃OS 数据）
     if (pathname === '/api/models' && req.method === 'GET') {
-      return sendJson(res, 200, { ok: true, models: await modelsWithCount() })
+      return sendJson(res, 200, { ok: true, models: await modelsWithCount(query.source || '') })
     }
 
     // 机型详情 + 系统包（可按 ?branch= 筛选）+ 该机型的移植包

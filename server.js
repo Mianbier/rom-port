@@ -33,7 +33,7 @@ function readBody(req) {
     let raw = ''
     req.on('data', (c) => {
       raw += c
-      if (raw.length > 2e6) req.destroy()
+      if (raw.length > 12e6) req.destroy()
     })
     req.on('end', () => {
       if (!raw) return resolve({})
@@ -291,6 +291,48 @@ const server = http.createServer(async (req, res) => {
           users: Object.keys(db.users).length,
           panLastSyncAt: db.panLastSyncAt || 0,
           panConfigured: !!(config.pan123 && config.pan123.clientID && config.pan123.clientSecret)
+        })
+      }
+
+      // 一次性数据导入：把本地 data.json 灌进云数据库（外部连不上 MySQL 时用这个）
+      // POST { type: 'models'|'roms'|'ports'|'users'|'updates', items: [...], clear?: true }
+      if (pathname === '/api/admin/import' && req.method === 'POST') {
+        const body = await readBody(req)
+        const type = body.type
+        const items = Array.isArray(body.items) ? body.items : []
+        if (!type) return sendJson(res, 400, { ok: false, error: '缺少 type' })
+        if (body.clear) await store.clearTable(type)
+        let n = 0
+        for (const it of items) {
+          if (type === 'models') await store.upsertModel(it)
+          else if (type === 'roms') await store.upsertRom(it)
+          else if (type === 'ports') await store.upsertPort(it)
+          else if (type === 'updates') await store.addUpdate(it)
+          else if (type === 'users') {
+            await store.upsertUser(it.openid)
+            if (it.quota) await store.setQuota(it.openid, it.quota)
+          } else {
+            return sendJson(res, 400, { ok: false, error: '未知 type: ' + type })
+          }
+          n++
+        }
+        return sendJson(res, 200, { ok: true, type, count: n })
+      }
+
+      // 诊断：看看云端到底连的是哪个数据库（不返回密码）
+      if (pathname === '/api/admin/dbconfig' && req.method === 'GET') {
+        const m = config.mysql || {}
+        return sendJson(res, 200, {
+          ok: true,
+          backend: process.env.MYSQL_ADDRESS || process.env.MYSQL_HOST ? 'mysql' : 'json',
+          host: m.host,
+          port: m.port,
+          user: m.user,
+          database: m.database,
+          hasPassword: !!m.password,
+          envPort: process.env.PORT || '',
+          mysqlAddress: process.env.MYSQL_ADDRESS || '',
+          mysqlUsername: process.env.MYSQL_USERNAME || ''
         })
       }
 

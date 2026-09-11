@@ -129,6 +129,40 @@ async function tickRefresh(n = 5) {
   return done
 }
 
+/**
+ * 机型库同步：定期拉一次官方机型索引，**新机型自动上架**（含 MIUI 老机型）。
+ * - kv modelSyncAt 记录上次同步时间，6 小时一次
+ * - 新发现的机型：入库 + 顺手抓一次版本数据（失败不打紧，用户打开时会自动再抓）
+ * - 已有机型不动（元数据变更由单机型刷新覆盖）
+ */
+const MODEL_SYNC_TTL = 6 * 60 * 60 * 1000
+let syncingModels = false
+
+async function syncModelList(force) {
+  if (syncingModels) return { skipped: true, reason: '正在同步' }
+  const last = Number(await store.getKv('modelSyncAt')) || 0
+  if (!force && Date.now() - last < MODEL_SYNC_TTL) return { skipped: true, reason: '未到同步时间' }
+  syncingModels = true
+  try {
+    const list = await hyperos.fetchDeviceList()
+    const existing = await store.getModels()
+    const known = new Set(existing.map((m) => m.id))
+    let added = 0
+    const addedCodes = []
+    for (const m of list) {
+      if (known.has(m.id)) continue
+      await store.upsertModel(m)
+      added++
+      if (addedCodes.length < 20) addedCodes.push(m.code)
+      refreshModelOnce(m).catch(() => {})
+    }
+    await store.setKv('modelSyncAt', String(Date.now()))
+    return { ok: true, total: list.length, added, addedCodes }
+  } finally {
+    syncingModels = false
+  }
+}
+
 /** 从请求里取 openid：云托管注入的 X-WX-OPENID 头，本地回退 body.openid */
 async function openidOf(req, body) {
   return headerOpenid(req) || (body && body.openid) || ''
@@ -151,12 +185,16 @@ function today() {
 }
 
 /**
- * 数据源判定：机型 id 前缀 `xr-` 是 XiaomiROM 引进的数据，其余是本小程序的澎湃OS 数据。
- * source='xr' 只返回 xiaomirom 的；其他（含空）返回澎湃OS 的。
+ * 数据源过滤：
+ *   source='xr' → 全部机型（HyperOS + MIUI 历史机型，331 台）
+ *   默认        → 只显示支持澎湃OS 的机型
+ * 早期从 xiaomirom 抓的 xr-* 数据已被统一数据源覆盖，不再展示。
  */
-function matchSource(id, source) {
-  const isXr = String(id || '').indexOf('xr-') === 0
-  return source === 'xr' ? isXr : !isXr
+function matchSource(m, source) {
+  const id = String(m.id || '')
+  if (id.indexOf('xr-') === 0) return false
+  if (source === 'xr') return true
+  return (m.supports || []).some((s) => /^OS/i.test(String(s)))
 }
 
 /** 机型列表，附带系统包版本数、最近更新时间、可用移植包数量 */
@@ -167,7 +205,7 @@ async function modelsWithCount(source) {
     store.portCounts()
   ])
   return models
-    .filter((m) => matchSource(m.id, source))
+    .filter((m) => matchSource(m, source))
     .map((m) => {
       const s = romStat[m.id]
       return {
@@ -317,10 +355,13 @@ const server = http.createServer(async (req, res) => {
       })
     }
 
-    // 机型列表（?source=xr 取 XiaomiROM 数据，默认取澎湃OS 数据）
+    // 机型列表（?source=xr 返回全部机型含 MIUI 历史；默认只返回澎湃OS 机型）
     if (pathname === '/api/models' && req.method === 'GET') {
-      // 顺手在后台轮换刷新官方数据（有人用就自动更新），不阻塞本次返回
+      // 顺手在后台做两件事（都不阻塞本次返回）：
+      //   tickRefresh   —— 轮换刷新已有机型的版本数据
+      //   syncModelList —— 定期同步官方机型库，新机型自动上架
       tickRefresh().catch(() => {})
+      syncModelList().catch(() => {})
       return sendJson(res, 200, { ok: true, models: await modelsWithCount(query.source || '') })
     }
 
@@ -480,7 +521,9 @@ const server = http.createServer(async (req, res) => {
       }
       // 批量：刷新「最久没更新」的前 N 个机型（定时任务分批跑，逐步全部刷新）
       const limit = Number(body.limit || query.limit) || 30
-      const models = (await store.getModels()).filter((m) => m.code)
+      const models = (await store.getModels()).filter(
+        (m) => m.code && String(m.id).indexOf('xr-') !== 0
+      )
       const stamps = []
       for (const m of models) stamps.push({ m, t: Number(await store.getKv('rf:' + m.id)) || 0 })
       stamps.sort((a, b) => a.t - b.t)
@@ -493,6 +536,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         ok: true, refreshed: picked.length, roms, totalModels: models.length, failed
       })
+    }
+
+    // 手动同步官方机型库：新机型（含新发布的 / MIUI 历史）自动上架
+    if (pathname === '/api/admin/sync-models' && (req.method === 'POST' || req.method === 'GET')) {
+      const token = req.headers['x-admin-token'] || query.token
+      if (token !== config.adminToken) return sendJson(res, 401, { ok: false, error: '管理令牌不正确' })
+      return sendJson(res, 200, Object.assign({ ok: true }, await syncModelList(true)))
     }
 
     // 发布新版本并推送

@@ -52,18 +52,18 @@ module.exports = {
   miniprogramState: 'developer',
 
   /**
-   * 模板字段映射
-   * 微信订阅消息模板里每个字段都有固定的 key（比如 thing1、time2、thing3...）
-   * 请到公众平台查看你选择的模板字段，然后把下面的 key 改成你自己的
-   * 支持的语义键：title(标题) / version(版本号) / content(更新内容) / time(时间) / remark(备注)
-   * 不需要的字段设为 '' 即可
+   * 模板字段映射（语义键 → 模板里的字段名）
+   * 当前模板：「系统更新维护通知」（模版编号 17789），字段如下：
+   *   维护平台 thing1 / 维护类型 short_thing5 / 维护内容 phrase2 / 温馨提示 thing6
+   * 注意字段类型长度限制：thing ≤20 字、short_thing ≤5 字、phrase ≤5 汉字，
+   * 所以语义键用了 platform / type / content / remark（值在 lib/notify.js 里组装）。
+   * 改这里要重新部署；也可以不改代码，直接用管理接口写 kv 的 wxFieldMap 覆盖。
    */
   fieldMap: {
-    title: 'thing1',    // 更新标题
-    version: 'thing2',  // 版本号
-    content: 'thing3',  // 更新内容
-    time: 'time4',      // 发布时间
-    remark: 'thing5'    // 备注（例如：点击查看下载链接）
+    platform: 'thing1',      // 维护平台
+    type: 'short_thing5',    // 维护类型
+    content: 'phrase2',      // 维护内容
+    remark: 'thing6'         // 温馨提示
   },
 
   /**

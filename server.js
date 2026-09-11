@@ -58,6 +58,18 @@ function maskSecret(s) {
   return s.slice(0, 4) + '****' + s.slice(-4)
 }
 
+/** 当前字段映射：优先 kv（可直接改，不用重新部署），否则 config.js 默认值 */
+async function currentFieldMap() {
+  try {
+    const raw = await store.getKv('wxFieldMap')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch (e) {}
+  return config.fieldMap || {}
+}
+
 /**
  * 微信云托管 callContainer 会自动给请求加上 X-WX-OPENID 头（当前用户的 openid）。
  * 本地开发（wx.request 直连）没有这个头，回退到 body 里的 code 走 code2session。
@@ -237,7 +249,7 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         templateId: templateId || '',
         appName: '系统移植包更新',
-        fieldMap: config.fieldMap || {}
+        fieldMap: await currentFieldMap()
       })
     }
 
@@ -354,7 +366,7 @@ const server = http.createServer(async (req, res) => {
         })
       }
 
-      // 运行时配置：AppSecret / 订阅模板 ID，存进 kv，避免写进公开仓库
+      // 运行时配置：AppSecret / 订阅模板 ID / 字段映射，存进 kv，避免写进公开仓库
       if (pathname === '/api/admin/config' && req.method === 'GET') {
         const secret = config.secret || (await store.getKv('wxSecret'))
         const templateId = config.templateId || (await store.getKv('wxTemplateId'))
@@ -363,7 +375,7 @@ const server = http.createServer(async (req, res) => {
           hasSecret: !!secret,
           secretMasked: maskSecret(secret),
           templateId: templateId || '',
-          fieldMap: config.fieldMap || {}
+          fieldMap: await currentFieldMap()
         })
       }
 
@@ -375,9 +387,17 @@ const server = http.createServer(async (req, res) => {
         if (body.templateId !== undefined && body.templateId !== '') {
           await store.setKv('wxTemplateId', body.templateId)
         }
+        if (body.fieldMap && typeof body.fieldMap === 'object') {
+          await store.setKv('wxFieldMap', JSON.stringify(body.fieldMap))
+        }
         const secret = config.secret || (await store.getKv('wxSecret'))
         const templateId = config.templateId || (await store.getKv('wxTemplateId'))
-        return sendJson(res, 200, { ok: true, hasSecret: !!secret, templateId: templateId || '' })
+        return sendJson(res, 200, {
+          ok: true,
+          hasSecret: !!secret,
+          templateId: templateId || '',
+          fieldMap: await currentFieldMap()
+        })
       }
 
       if (pathname === '/api/admin/model' && req.method === 'POST') {

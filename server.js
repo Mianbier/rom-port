@@ -14,6 +14,7 @@ const store = require('./lib/store')
 const wechat = require('./lib/wechat')
 const notify = require('./lib/notify')
 const pan123 = require('./lib/pan123')
+const hyperos = require('./lib/hyperos')
 
 const ADMIN_HTML = path.join(__dirname, 'public', 'admin.html')
 
@@ -68,6 +69,30 @@ async function currentFieldMap() {
     }
   } catch (e) {}
   return config.fieldMap || {}
+}
+
+/* ---------------- hyperos 官方数据刷新 ---------------- */
+
+const REFRESH_TTL = 12 * 60 * 60 * 1000 // 12 小时：机型数据超过这个时间没更新就自动刷新
+
+/** 抓取并覆盖某机型的全部系统包（保留手动新增的） */
+async function refreshModel(model) {
+  if (!model || !model.code) return 0
+  const { roms } = await hyperos.fetchDeviceRoms(model.code)
+  const n = await store.replaceModelRoms(model.id, roms)
+  await store.setKv('rf:' + model.id, String(Date.now()))
+  return n
+}
+
+/** 数据是否过期（按机型记录上次刷新时间） */
+async function isStale(modelId) {
+  const last = Number(await store.getKv('rf:' + modelId)) || 0
+  return Date.now() - last > REFRESH_TTL
+}
+
+/** 从请求里取 openid：云托管注入的 X-WX-OPENID 头，本地回退 body.openid */
+async function openidOf(req, body) {
+  return headerOpenid(req) || (body && body.openid) || ''
 }
 
 /**
@@ -263,6 +288,16 @@ const server = http.createServer(async (req, res) => {
       const id = query.id
       const model = await store.getModel(id)
       if (!model) return sendJson(res, 404, { ok: false, error: '机型不存在' })
+
+      // 数据过期就在后台悄悄抓一次 hyperos 官方数据（不阻塞本次返回，下次打开就是新的）
+      if (model.code) {
+        isStale(id)
+          .then((stale) => {
+            if (!stale) return
+            return store.setKv('rf:' + id, String(Date.now())).then(() => refreshModel(model))
+          })
+          .catch(() => {})
+      }
       const allRoms = await store.getRoms(id)
       const branch = query.branch || ''
       const picked = branch ? allRoms.filter((r) => r.branch === branch) : allRoms
@@ -296,6 +331,114 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         list: (await store.getPorts()).map(withPortUrls),
         lastSyncAt: db.panLastSyncAt || 0
+      })
+    }
+
+    // ---------- 评论 ----------
+    // GET  /api/comments?target=rom:xxx  → 某版本的评论列表（不暴露 openid，只标 mine）
+    if (pathname === '/api/comments' && req.method === 'GET') {
+      const target = query.target || ''
+      if (!target) return sendJson(res, 400, { ok: false, error: '缺少 target' })
+      const openid = headerOpenid(req) || query.openid || ''
+      const list = await store.getComments(target)
+      const safe = list.map((c) => ({
+        id: c.id,
+        nickname: c.nickname,
+        avatar: c.avatar,
+        content: c.content,
+        createdAt: c.createdAt,
+        mine: !!openid && c.openid === openid
+      }))
+      return sendJson(res, 200, { ok: true, list: safe, total: safe.length })
+    }
+
+    // POST /api/comments  { target, content, nickname?, avatar? }
+    if (pathname === '/api/comments' && req.method === 'POST') {
+      const body = await readBody(req)
+      const openid = await openidOf(req, body)
+      const target = String(body.target || '').trim()
+      const content = String(body.content || '').trim()
+      if (!openid) return sendJson(res, 400, { ok: false, error: '缺少 openid' })
+      if (!target) return sendJson(res, 400, { ok: false, error: '缺少 target' })
+      if (!content) return sendJson(res, 400, { ok: false, error: '评论内容不能为空' })
+      if (content.length > 500) return sendJson(res, 400, { ok: false, error: '评论太长了（最多 500 字）' })
+      // 昵称 / 头像：请求里没带就读已存的资料
+      let nickname = String(body.nickname || '').trim()
+      let avatar = String(body.avatar || '')
+      if (!nickname || !avatar) {
+        const p = await store.getProfile(openid)
+        if (p) {
+          if (!nickname) nickname = p.nickname
+          if (!avatar) avatar = p.avatar
+        }
+      }
+      // 存一份资料，下次评论自动带上
+      if (nickname || avatar) await store.setProfile(openid, nickname, avatar)
+      const c = await store.addComment({
+        target, openid, nickname: nickname || '微信用户', avatar, content
+      })
+      return sendJson(res, 200, {
+        ok: true,
+        comment: {
+          id: c.id, nickname: c.nickname, avatar: c.avatar,
+          content: c.content, createdAt: c.createdAt, mine: true
+        }
+      })
+    }
+
+    // POST /api/comments/delete  { id }（只能删自己的）
+    if (pathname === '/api/comments/delete' && req.method === 'POST') {
+      const body = await readBody(req)
+      const openid = await openidOf(req, body)
+      if (!body.id) return sendJson(res, 400, { ok: false, error: '缺少 id' })
+      const r = await store.deleteComment(body.id, openid)
+      if (!r.ok) return sendJson(res, 403, { ok: false, error: r.error })
+      return sendJson(res, 200, { ok: true })
+    }
+
+    // 用户资料：评论用的昵称 / 头像
+    if (pathname === '/api/profile' && req.method === 'GET') {
+      const openid = headerOpenid(req) || query.openid || ''
+      if (!openid) return sendJson(res, 400, { ok: false, error: '缺少 openid' })
+      const p = await store.getProfile(openid)
+      return sendJson(res, 200, { ok: true, profile: p || null })
+    }
+
+    if (pathname === '/api/profile' && req.method === 'POST') {
+      const body = await readBody(req)
+      const openid = await openidOf(req, body)
+      if (!openid) return sendJson(res, 400, { ok: false, error: '缺少 openid' })
+      const p = await store.setProfile(openid, String(body.nickname || '').trim(), String(body.avatar || ''))
+      return sendJson(res, 200, { ok: true, profile: p })
+    }
+
+    // ---------- 手动 / 定时刷新 hyperos 官方数据 ----------
+    // 令牌：可用 x-admin-token 头，或用 ?token= 查询参数（方便云托管定时任务）
+    if (pathname === '/api/admin/refresh' && (req.method === 'POST' || req.method === 'GET')) {
+      const token = req.headers['x-admin-token'] || query.token
+      if (token !== config.adminToken) return sendJson(res, 401, { ok: false, error: '管理令牌不正确' })
+      const body = req.method === 'POST' ? await readBody(req) : {}
+      const modelId = body.modelId || query.modelId
+      if (modelId) {
+        const m = await store.getModel(modelId)
+        if (!m) return sendJson(res, 404, { ok: false, error: '机型不存在' })
+        const n = await refreshModel(m)
+        return sendJson(res, 200, { ok: true, modelId, roms: n })
+      }
+      // 批量：刷新「最久没更新」的前 N 个机型（定时任务分批跑，逐步全部刷新）
+      const limit = Number(body.limit || query.limit) || 30
+      const models = (await store.getModels()).filter((m) => m.code)
+      const stamps = []
+      for (const m of models) stamps.push({ m, t: Number(await store.getKv('rf:' + m.id)) || 0 })
+      stamps.sort((a, b) => a.t - b.t)
+      const picked = stamps.slice(0, limit)
+      let roms = 0
+      const failed = []
+      for (const { m } of picked) {
+        try { roms += await refreshModel(m) } catch (e) { failed.push(m.code) }
+      }
+      return sendJson(res, 200, {
+        ok: true, refreshed: picked.length, roms, totalModels: models.length, failed
       })
     }
 

@@ -74,6 +74,7 @@ async function currentFieldMap() {
 /* ---------------- hyperos 官方数据刷新 ---------------- */
 
 const REFRESH_TTL = 12 * 60 * 60 * 1000 // 12 小时：机型数据超过这个时间没更新就自动刷新
+const refreshing = new Set() // 正在刷新的机型（防止并发重复抓）
 
 /** 抓取并覆盖某机型的全部系统包（保留手动新增的） */
 async function refreshModel(model) {
@@ -82,6 +83,17 @@ async function refreshModel(model) {
   const n = await store.replaceModelRoms(model.id, roms)
   await store.setKv('rf:' + model.id, String(Date.now()))
   return n
+}
+
+/** 带并发保护的刷新：同一机型同一时间只抓一次 */
+async function refreshModelOnce(model) {
+  if (!model || !model.code || refreshing.has(model.id)) return 0
+  refreshing.add(model.id)
+  try {
+    return await refreshModel(model)
+  } finally {
+    refreshing.delete(model.id)
+  }
 }
 
 /** 数据是否过期（按机型记录上次刷新时间） */
@@ -289,14 +301,15 @@ const server = http.createServer(async (req, res) => {
       const model = await store.getModel(id)
       if (!model) return sendJson(res, 404, { ok: false, error: '机型不存在' })
 
-      // 数据过期就在后台悄悄抓一次 hyperos 官方数据（不阻塞本次返回，下次打开就是新的）
-      if (model.code) {
-        isStale(id)
-          .then((stale) => {
-            if (!stale) return
-            return store.setKv('rf:' + id, String(Date.now())).then(() => refreshModel(model))
-          })
-          .catch(() => {})
+      // 数据过期就先抓一次 hyperos 官方数据（最多等 8 秒，抓不到就先用旧数据）
+      if (model.code && (await isStale(id))) {
+        await store.setKv('rf:' + id, String(Date.now())) // 先占位，避免并发重复抓
+        try {
+          await Promise.race([
+            refreshModelOnce(model),
+            new Promise((r) => setTimeout(r, 8000))
+          ])
+        } catch (e) {}
       }
       const allRoms = await store.getRoms(id)
       const branch = query.branch || ''

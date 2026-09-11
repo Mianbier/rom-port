@@ -29,6 +29,14 @@ if (!mysqlConf.host || !mysqlConf.user || !mysqlConf.password) {
   process.exit(1)
 }
 
+/** 日期列不接受空字符串，空值要转成 NULL */
+function dateOrNull(v) {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  if (!s) return null
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null
+}
+
 // 单独 require：拿到 lib/store-mysql.js 自己起的连接池和建表逻辑
 const store = require('../lib/store-mysql')
 const pool = require('mysql2/promise').createPool({
@@ -142,7 +150,8 @@ async function main() {
       await conn.query(
         `INSERT INTO roms (id, model_id, version, branch, branch_tag, region, android, release_date, aspatch, recovery, fastboot, manual)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [r.id, r.modelId, r.version, r.branch, r.branchTag, r.region, r.android, r.release, r.aspatch, r.recovery, r.fastboot, r.manual ? 1 : 0]
+        [r.id, r.modelId, r.version, r.branch, r.branchTag, r.region, r.android,
+         dateOrNull(r.release), dateOrNull(r.aspatch), r.recovery, r.fastboot, r.manual ? 1 : 0]
       )
     }
 
@@ -151,7 +160,7 @@ async function main() {
       await conn.query(
         `INSERT INTO ports (id, model_id, version, title, content, size, url, share_url, share_code, port_source, pan_file_id, release_date, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [p.id, p.modelId, p.version, p.title, p.content, p.size, p.url, p.shareUrl, p.shareCode, p.source, p.panFileId, p.release, p.createdAt]
+        [p.id, p.modelId, p.version, p.title, p.content, p.size, p.url, p.shareUrl, p.shareCode, p.source, p.panFileId, dateOrNull(p.release), p.createdAt]
       )
     }
 

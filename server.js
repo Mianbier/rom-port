@@ -51,6 +51,13 @@ function isAdmin(req) {
   return req.headers['x-admin-token'] === config.adminToken
 }
 
+/** 打码 AppSecret，接口里只回显首尾几位 */
+function maskSecret(s) {
+  if (!s) return ''
+  if (s.length <= 8) return '****'
+  return s.slice(0, 4) + '****' + s.slice(-4)
+}
+
 /**
  * 微信云托管 callContainer 会自动给请求加上 X-WX-OPENID 头（当前用户的 openid）。
  * 本地开发（wx.request 直连）没有这个头，回退到 body 里的 code 走 code2session。
@@ -223,6 +230,17 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, Object.assign({ ok: true }, await store.getUpdates()))
     }
 
+    // 对外公开的运行配置（供小程序拉取订阅模板 ID 等，不含任何密钥）
+    if (pathname === '/api/config' && req.method === 'GET') {
+      const templateId = config.templateId || (await store.getKv('wxTemplateId'))
+      return sendJson(res, 200, {
+        ok: true,
+        templateId: templateId || '',
+        appName: '系统移植包更新',
+        fieldMap: config.fieldMap || {}
+      })
+    }
+
     // 机型列表
     if (pathname === '/api/models' && req.method === 'GET') {
       return sendJson(res, 200, { ok: true, models: await modelsWithCount() })
@@ -334,6 +352,32 @@ const server = http.createServer(async (req, res) => {
           mysqlAddress: process.env.MYSQL_ADDRESS || '',
           mysqlUsername: process.env.MYSQL_USERNAME || ''
         })
+      }
+
+      // 运行时配置：AppSecret / 订阅模板 ID，存进 kv，避免写进公开仓库
+      if (pathname === '/api/admin/config' && req.method === 'GET') {
+        const secret = config.secret || (await store.getKv('wxSecret'))
+        const templateId = config.templateId || (await store.getKv('wxTemplateId'))
+        return sendJson(res, 200, {
+          ok: true,
+          hasSecret: !!secret,
+          secretMasked: maskSecret(secret),
+          templateId: templateId || '',
+          fieldMap: config.fieldMap || {}
+        })
+      }
+
+      if (pathname === '/api/admin/config' && req.method === 'POST') {
+        const body = await readBody(req)
+        if (body.secret !== undefined && body.secret !== '') {
+          await store.setKv('wxSecret', body.secret)
+        }
+        if (body.templateId !== undefined && body.templateId !== '') {
+          await store.setKv('wxTemplateId', body.templateId)
+        }
+        const secret = config.secret || (await store.getKv('wxSecret'))
+        const templateId = config.templateId || (await store.getKv('wxTemplateId'))
+        return sendJson(res, 200, { ok: true, hasSecret: !!secret, templateId: templateId || '' })
       }
 
       if (pathname === '/api/admin/model' && req.method === 'POST') {

@@ -49,12 +49,12 @@ module.exports = {
    * 页面会把每个包的全部镜像都列出来（第一个作为主链接，cdnorg 实测可用）。
    * 顺序 = 展示顺序；改这里不用动代码逻辑。
    */
+  // 只保留实测可用的小米官方镜像（bigota / hugeota 实测返回 403，已移除）
+  // 同一个文件在多个镜像上的路径完全一致：/<版本号>/<文件名>
   romCdnMirrors: [
     { label: '小米官方', host: 'cdnorg.d.miui.com' },
     { label: '小米官方 #2', host: 'bn.d.miui.com' },
-    { label: '小米官方 #3', host: 'bigota.d.miui.com' },
-    { label: '小米官方 #4', host: 'hugeota.d.miui.com' },
-    { label: '小米官方 #5（新加坡）', host: 'bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com' }
+    { label: '小米官方 #3（新加坡）', host: 'bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com' }
   ],
 
   // 调用发布接口需要的管理令牌，自己随便改成一串别人猜不到的字符

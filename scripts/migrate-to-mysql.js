@@ -140,7 +140,7 @@ async function main() {
     console.log('导入系统包…')
     for (const r of data.roms || []) {
       await conn.query(
-        `INSERT INTO roms (id, model_id, version, branch, branch_tag, region, android, release, aspatch, recovery, fastboot, manual)
+        `INSERT INTO roms (id, model_id, version, branch, branch_tag, region, android, release_date, aspatch, recovery, fastboot, manual)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [r.id, r.modelId, r.version, r.branch, r.branchTag, r.region, r.android, r.release, r.aspatch, r.recovery, r.fastboot, r.manual ? 1 : 0]
       )
@@ -149,7 +149,7 @@ async function main() {
     console.log('导入移植包…')
     for (const p of data.ports || []) {
       await conn.query(
-        `INSERT INTO ports (id, model_id, version, title, content, size, url, share_url, share_code, source, pan_file_id, release, created_at)
+        `INSERT INTO ports (id, model_id, version, title, content, size, url, share_url, share_code, port_source, pan_file_id, release_date, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [p.id, p.modelId, p.version, p.title, p.content, p.size, p.url, p.shareUrl, p.shareCode, p.source, p.panFileId, p.release, p.createdAt]
       )

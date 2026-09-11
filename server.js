@@ -68,20 +68,24 @@ function today() {
 }
 
 /** 机型列表，附带系统包版本数、最近更新时间、可用移植包数量 */
-function modelsWithCount() {
-  const db = store.read()
+async function modelsWithCount() {
+  const [models, roms, ports] = await Promise.all([
+    store.getModels(),
+    store.getRoms(),
+    store.getPorts()
+  ])
   const romStat = {}
-  db.roms.forEach((r) => {
+  roms.forEach((r) => {
     const s = romStat[r.modelId] || (romStat[r.modelId] = { count: 0, latest: '' })
     s.count++
     if (r.release && r.release > s.latest) s.latest = r.release
   })
   const portCount = {}
-  db.ports.forEach((p) => {
+  ports.forEach((p) => {
     // 有直链或分享链接才算可用，和小程序里的判断保持一致
     if (p.modelId && (p.url || p.shareUrl)) portCount[p.modelId] = (portCount[p.modelId] || 0) + 1
   })
-  return db.models.map((m) => {
+  return models.map((m) => {
     const s = romStat[m.id]
     return {
       ...m,
@@ -172,7 +176,7 @@ function modelForBrand(model, brand) {
 
 async function syncPan() {
   const entries = await pan123.syncPorts()
-  store.replacePorts(entries)
+  await store.replacePorts(entries)
   return { count: entries.length, list: entries }
 }
 
@@ -198,38 +202,38 @@ const server = http.createServer(async (req, res) => {
       // 云托管：openid 由平台注入头，直接用；本地开发：用 code 换
       const openid = headerOpenid(req)
       if (openid) {
-        store.upsertUser(openid)
+        await store.upsertUser(openid)
         return sendJson(res, 200, { ok: true, openid })
       }
       const { code } = await readBody(req)
       if (!code) return sendJson(res, 400, { ok: false, error: '缺少 code' })
       const data = await wechat.code2Session(code)
-      store.upsertUser(data.openid)
+      await store.upsertUser(data.openid)
       return sendJson(res, 200, { ok: true, openid: data.openid })
     }
 
     if (pathname === '/api/subscribe' && req.method === 'POST') {
       const openid = headerOpenid(req) || (await readBody(req)).openid
       if (!openid) return sendJson(res, 400, { ok: false, error: '缺少 openid' })
-      const user = store.addSubscription(openid)
+      const user = await store.addSubscription(openid)
       return sendJson(res, 200, { ok: true, quota: user.quota })
     }
 
     if (pathname === '/api/updates' && req.method === 'GET') {
-      return sendJson(res, 200, Object.assign({ ok: true }, store.getUpdates()))
+      return sendJson(res, 200, Object.assign({ ok: true }, await store.getUpdates()))
     }
 
     // 机型列表
     if (pathname === '/api/models' && req.method === 'GET') {
-      return sendJson(res, 200, { ok: true, models: modelsWithCount() })
+      return sendJson(res, 200, { ok: true, models: await modelsWithCount() })
     }
 
     // 机型详情 + 系统包（可按 ?branch= 筛选）+ 该机型的移植包
     if (pathname === '/api/models/detail' && req.method === 'GET') {
       const id = query.id
-      const model = store.getModel(id)
+      const model = await store.getModel(id)
       if (!model) return sendJson(res, 404, { ok: false, error: '机型不存在' })
-      const allRoms = store.getRoms(id)
+      const allRoms = await store.getRoms(id)
       const branch = query.branch || ''
       const picked = branch ? allRoms.filter((r) => r.branch === branch) : allRoms
       picked.sort((a, b) => String(b.release).localeCompare(String(a.release)))
@@ -240,27 +244,27 @@ const server = http.createServer(async (req, res) => {
         total: allRoms.length,
         branch,
         roms: picked.map(withUrls),
-        ports: store.getPorts(id).map(withPortUrls)
+        ports: (await store.getPorts(id)).map(withPortUrls)
       })
     }
 
     // 单个系统包详情
     if (pathname === '/api/roms/detail' && req.method === 'GET') {
-      const rom = store.getRoms().find((x) => x.id === query.id)
+      const rom = (await store.getRoms()).find((x) => x.id === query.id)
       if (!rom) return sendJson(res, 404, { ok: false, error: '系统包不存在' })
       return sendJson(res, 200, {
         ok: true,
         rom: withUrls(rom),
-        model: store.getModel(rom.modelId) || null
+        model: (await store.getModel(rom.modelId)) || null
       })
     }
 
     // 移植包列表
     if (pathname === '/api/ports' && req.method === 'GET') {
-      const db = store.read()
+      const db = await store.read()
       return sendJson(res, 200, {
         ok: true,
-        list: store.getPorts().map(withPortUrls),
+        list: (await store.getPorts()).map(withPortUrls),
         lastSyncAt: db.panLastSyncAt || 0
       })
     }
@@ -278,7 +282,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAdmin(req)) return sendJson(res, 401, { ok: false, error: '管理令牌不正确' })
 
       if (pathname === '/api/admin/overview' && req.method === 'GET') {
-        const db = store.read()
+        const db = await store.read()
         return sendJson(res, 200, {
           ok: true,
           models: db.models.length,
@@ -294,13 +298,13 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req)
         if (!body.name) return sendJson(res, 400, { ok: false, error: '缺少机型名称' })
         const id = body.id || `m-${Date.now().toString(36)}`
-        store.upsertModel({ id, name: body.name, series: body.series || '其他', codename: body.codename || '' })
+        await store.upsertModel({ id, name: body.name, series: body.series || '其他', codename: body.codename || '' })
         return sendJson(res, 200, { ok: true, id })
       }
 
       if (pathname === '/api/admin/model/delete' && req.method === 'POST') {
         const { id } = await readBody(req)
-        store.deleteModel(id)
+        await store.deleteModel(id)
         return sendJson(res, 200, { ok: true })
       }
 
@@ -309,7 +313,7 @@ const server = http.createServer(async (req, res) => {
         if (!body.modelId) return sendJson(res, 400, { ok: false, error: '缺少 modelId' })
         if (!body.version) return sendJson(res, 400, { ok: false, error: '缺少版本号' })
         const id = body.id || `r-m-${Date.now().toString(36)}`
-        store.upsertRom({
+        await store.upsertRom({
           id,
           modelId: body.modelId,
           version: String(body.version).trim(),
@@ -329,7 +333,7 @@ const server = http.createServer(async (req, res) => {
 
       if (pathname === '/api/admin/rom/delete' && req.method === 'POST') {
         const { id } = await readBody(req)
-        store.deleteRom(id)
+        await store.deleteRom(id)
         return sendJson(res, 200, { ok: true })
       }
 
@@ -341,7 +345,7 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 400, { ok: false, error: '至少要填版本号、标题或一个下载地址' })
         }
         const id = body.id || `p-${Date.now().toString(36)}`
-        store.upsertPort({
+        await store.upsertPort({
           id,
           modelId: body.modelId || '',
           version: body.version || '',
@@ -365,14 +369,14 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/admin/port/model' && req.method === 'POST') {
         const { id, modelId } = await readBody(req)
         if (!id) return sendJson(res, 400, { ok: false, error: '缺少 id' })
-        const port = store.setPortModel(id, modelId || '')
+        const port = await store.setPortModel(id, modelId || '')
         if (!port) return sendJson(res, 404, { ok: false, error: '移植包不存在' })
         return sendJson(res, 200, { ok: true, modelId: port.modelId })
       }
 
       if (pathname === '/api/admin/port/delete' && req.method === 'POST') {
         const { id } = await readBody(req)
-        store.deletePort(id)
+        await store.deletePort(id)
         return sendJson(res, 200, { ok: true })
       }
 
@@ -408,7 +412,7 @@ function lanAddresses() {
   return out.sort((a, b) => Number(a.virtual) - Number(b.virtual) || Number(b.physical) - Number(a.physical))
 }
 
-server.listen(config.port, () => {
+server.listen(config.port, async () => {
   const lans = lanAddresses()
   const best = lans.find((l) => !l.virtual)
   console.log('==================================================')
@@ -433,8 +437,13 @@ server.listen(config.port, () => {
   }
   console.log('')
   console.log(`  管理后台: http://127.0.0.1:${config.port}/admin`)
-  console.log(`  订阅用户: ${store.listUsers().length}`)
-  console.log(`  机型数量: ${store.getModels().length}  移植包: ${store.getPorts().length}`)
+  try {
+    const [us, ms, ps] = await Promise.all([store.listUsers(), store.getModels(), store.getPorts()])
+    console.log(`  订阅用户: ${us.length}`)
+    console.log(`  机型数量: ${ms.length}  移植包: ${ps.length}`)
+  } catch (e) {
+    console.log(`  数据读取失败: ${e.message}`)
+  }
   console.log('==================================================')
   console.log('')
   console.log('  真机使用步骤：')

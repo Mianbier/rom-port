@@ -73,7 +73,7 @@ async function currentFieldMap() {
 
 /* ---------------- hyperos 官方数据刷新 ---------------- */
 
-const REFRESH_TTL = 12 * 60 * 60 * 1000 // 12 小时：机型数据超过这个时间没更新就自动刷新
+const REFRESH_TTL = 30 * 60 * 1000 // 30 分钟：机型数据超过这个时间没更新就自动刷新（官方出新包 30 分钟内可见）
 const refreshing = new Set() // 正在刷新的机型（防止并发重复抓）
 
 /** 抓取并覆盖某机型的全部系统包（保留手动新增的） */
@@ -109,9 +109,9 @@ async function isStale(modelId) {
  * - 轮询下标存 kv tickIdx，保证所有机型都能轮着更新到
  * - fire-and-forget，不阻塞接口返回
  */
-async function tickRefresh(n = 3) {
+async function tickRefresh(n = 5) {
   const last = Number(await store.getKv('tickAt')) || 0
-  if (Date.now() - last < 2 * 60 * 1000) return 0
+  if (Date.now() - last < 60 * 1000) return 0
   await store.setKv('tickAt', String(Date.now()))
   const all = (await store.getModels()).filter((m) => m.code && String(m.id).indexOf('xr-') !== 0)
   if (!all.length) return 0
@@ -330,15 +330,24 @@ const server = http.createServer(async (req, res) => {
       const model = await store.getModel(id)
       if (!model) return sendJson(res, 404, { ok: false, error: '机型不存在' })
 
-      // 数据过期就先抓一次 hyperos 官方数据（最多等 8 秒，抓不到就先用旧数据）
-      if (model.code && (await isStale(id))) {
-        await store.setKv('rf:' + id, String(Date.now())) // 先占位，避免并发重复抓
-        try {
-          await Promise.race([
-            refreshModelOnce(model),
-            new Promise((r) => setTimeout(r, 8000))
-          ])
-        } catch (e) {}
+      // 实时策略（stale-while-revalidate）：
+      //   ?fresh=1 → 用户主动下拉刷新，同步抓一次官方最新数据再返回（最多等 8 秒）
+      //   默认     → 秒回现有数据，同时在后台悄悄抓最新的；返回 stale=true 让前端几秒后自动重拉
+      let stale = false
+      if (model.code) {
+        stale = await isStale(id)
+        const force = query.fresh === '1' || query.fresh === 'true'
+        if (stale && force) {
+          try {
+            await Promise.race([
+              refreshModelOnce(model),
+              new Promise((r) => setTimeout(r, 8000))
+            ])
+          } catch (e) {}
+          stale = false
+        } else if (stale) {
+          refreshModelOnce(model).catch(() => {})
+        }
       }
       const allRoms = await store.getRoms(id)
       const branch = query.branch || ''
@@ -350,6 +359,8 @@ const server = http.createServer(async (req, res) => {
         branches: branchSummary(allRoms),
         total: allRoms.length,
         branch,
+        stale,
+        fetchedAt: Date.now(),
         roms: picked.map(withUrls),
         ports: (await store.getPorts(id)).map(withPortUrls)
       })

@@ -102,6 +102,33 @@ async function isStale(modelId) {
   return Date.now() - last > REFRESH_TTL
 }
 
+/**
+ * 后台自动更新：每次有人打开小程序（即调用 /api/models）时，
+ * 在后台轮换刷新几台「最久没更新」的机型。
+ * - 全局 2 分钟冷却（kv tickAt），避免频繁触发
+ * - 轮询下标存 kv tickIdx，保证所有机型都能轮着更新到
+ * - fire-and-forget，不阻塞接口返回
+ */
+async function tickRefresh(n = 3) {
+  const last = Number(await store.getKv('tickAt')) || 0
+  if (Date.now() - last < 2 * 60 * 1000) return 0
+  await store.setKv('tickAt', String(Date.now()))
+  const all = (await store.getModels()).filter((m) => m.code && String(m.id).indexOf('xr-') !== 0)
+  if (!all.length) return 0
+  const idx = Number(await store.getKv('tickIdx')) || 0
+  let done = 0
+  const count = Math.min(n, all.length)
+  for (let i = 0; i < count; i++) {
+    const m = all[(idx + i) % all.length]
+    try {
+      await refreshModelOnce(m)
+      done++
+    } catch (e) {}
+  }
+  await store.setKv('tickIdx', String((idx + count) % all.length))
+  return done
+}
+
 /** 从请求里取 openid：云托管注入的 X-WX-OPENID 头，本地回退 body.openid */
 async function openidOf(req, body) {
   return headerOpenid(req) || (body && body.openid) || ''
@@ -292,6 +319,8 @@ const server = http.createServer(async (req, res) => {
 
     // 机型列表（?source=xr 取 XiaomiROM 数据，默认取澎湃OS 数据）
     if (pathname === '/api/models' && req.method === 'GET') {
+      // 顺手在后台轮换刷新官方数据（有人用就自动更新），不阻塞本次返回
+      tickRefresh().catch(() => {})
       return sendJson(res, 200, { ok: true, models: await modelsWithCount(query.source || '') })
     }
 

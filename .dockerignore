@@ -1,0 +1,7 @@
+node_modules
+data.json
+data.json.bak
+data.models.json
+rom-port-cloudrun.zip
+*.log
+.DS_Store

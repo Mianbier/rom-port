@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>移植包更新 · 管理后台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f2f4f8; color: #1f2430; }
+  header { background: linear-gradient(135deg,#4a7cff,#6f5bff); color:#fff; padding: 20px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .token-box { display:flex; gap:8px; align-items:center; }
+  header input { padding: 8px 10px; border-radius: 8px; border: none; width: 240px; font-size: 13px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+  .card { background:#fff; border-radius:12px; padding:16px; }
+  .card .num { font-size:26px; font-weight:700; color:#4a7cff; }
+  .card .lbl { font-size:13px; color:#8b90a0; margin-top:4px; }
+  section { background:#fff; border-radius:12px; padding:18px 20px; margin-bottom:18px; }
+  section h2 { font-size:15px; margin:0 0 14px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; }
+  input, select, textarea { padding:9px 11px; border:1px solid #dfe3ec; border-radius:8px; font-size:13px; font-family:inherit; }
+  textarea { width:100%; min-height:70px; resize:vertical; }
+  button { padding:9px 16px; border:none; border-radius:8px; background:#4a7cff; color:#fff; font-size:13px; cursor:pointer; }
+  button.ghost { background:#eef1f8; color:#333; }
+  button.danger { background:#ff5a5a; }
+  button:disabled { opacity:.6; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eef0f5; vertical-align:top; }
+  th { color:#8b90a0; font-weight:500; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:20px; background:#eef1f8; color:#4a7cff; font-size:12px; }
+  .muted { color:#8b90a0; font-size:12px; }
+  .url { max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
+  #log { font-family:Consolas, monospace; font-size:12px; color:#4a5568; background:#f7f8fb; border-radius:8px; padding:10px; margin-top:10px; white-space:pre-wrap; max-height:180px; overflow:auto; }
+  .hint { font-size:12px; color:#8b90a0; margin:-6px 0 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>移植包更新 · 管理后台</h1>
+  <div class="token-box">
+    <input id="token" placeholder="管理令牌 (config.js 里的 adminToken)">
+    <button class="ghost" onclick="saveToken()">保存令牌</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="cards">
+    <div class="card"><div class="num" id="s-models">-</div><div class="lbl">机型</div></div>
+    <div class="card"><div class="num" id="s-roms">-</div><div class="lbl">更新包</div></div>
+    <div class="card"><div class="num" id="s-ports">-</div><div class="lbl">移植包版本</div></div>
+    <div class="card"><div class="num" id="s-users">-</div><div class="lbl">订阅用户</div></div>
+  </div>
+
+  <section>
+    <h2>123 云盘同步（移植包）</h2>
+    <div class="row">
+      <button onclick="syncPan()" id="syncBtn">立即同步移植包</button>
+      <span class="muted" id="pan-state"></span>
+    </div>
+    <div class="hint">先在 server/config.js 配置 pan123.clientID / clientSecret / parentFileId，把移植包上传到该目录后点同步。同步只更新链接，机型归属会保留；同步后请到下方「移植包版本」里给新出现的文件指定机型。</div>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>机型管理</h2>
+    <div class="row">
+      <input id="m-name" placeholder="机型名称，如 小米14">
+      <input id="m-series" placeholder="系列，如 小米数字系列" value="小米数字系列">
+      <input id="m-code" placeholder="代号（选填），如 houji">
+      <button onclick="addModel()">添加机型</button>
+    </div>
+    <table>
+      <thead><tr><th>机型</th><th>系列</th><th>代号</th><th>更新包</th><th>移植包</th><th></th></tr></thead>
+      <tbody id="models-body"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>系统包（手动补充） <span class="muted" id="rom-count"></span></h2>
+    <div class="hint">批量数据用命令行导入：<code>node import-hyperos.js</code>（会覆盖这里导入的机型与系统包，手工补的不会被动）。这里用于单独补一条。卡刷/线刷可以只填文件名，链接会按 config.romCdnBase 自动拼。</div>
+    <div class="row">
+      <select id="r-model"></select>
+      <input id="r-ver" placeholder="版本号，如 OS3.0.306.0.WNCCNXM">
+      <input id="r-branch" placeholder="分支，如 小米澎湃 OS 正式版" value="手动添加">
+      <input id="r-android" placeholder="Android，如 16.0" style="width:120px">
+      <button onclick="addRom()">添加</button>
+    </div>
+    <div class="row">
+      <input id="r-recovery" placeholder="卡刷包：文件名或完整链接" style="flex:1;min-width:280px">
+      <input id="r-fastboot" placeholder="线刷包：文件名或完整链接" style="flex:1;min-width:280px">
+    </div>
+    <table>
+      <thead><tr><th>机型</th><th>版本</th><th>分支</th><th>日期</th><th>卡刷</th><th>线刷</th><th></th></tr></thead>
+      <tbody id="roms-body"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>移植包版本</h2>
+    <div class="hint">移植包必须指定机型，才会出现在小程序里该机型的「移植包下载」中；未指定机型的记录不会展示。<br><b>发布日期</b>填了就按日期从新到旧排序，不填的按添加时间排在后面。123 云盘同步来的直链是<b>带签名的临时链接</b>，会过期；建议同时填一个长期有效的分享链接 + 提取码作为备用入口，小程序会两个都给出来。</div>
+    <div class="row">
+      <select id="p-model"></select>
+      <input id="p-ver" placeholder="版本号，如 1.2.0" style="width:170px">
+      <input id="p-release" placeholder="发布日期 2026-08-01" style="width:180px">
+      <input id="p-title" placeholder="标题（选填）">
+      <button onclick="addPort()">添加</button>
+    </div>
+    <div class="row">
+      <input id="p-url" placeholder="直接下载地址（123 云盘同步会自动填这里）" style="flex:1;min-width:280px">
+      <input id="p-share" placeholder="123 云盘分享链接" style="flex:1;min-width:220px">
+      <input id="p-code" placeholder="提取码" style="width:110px">
+    </div>
+    <table>
+      <thead><tr><th>机型</th><th>版本</th><th>发布日期</th><th>标题</th><th>来源</th><th>链接</th><th></th></tr></thead>
+      <tbody id="ports-body"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>发布更新提醒</h2>
+    <div class="row">
+      <input id="n-ver" placeholder="版本号，如 1.2.0">
+      <input id="n-title" placeholder="提醒标题">
+      <input id="n-url" placeholder="下载地址" style="flex:1;min-width:260px">
+      <button onclick="publish()">发布并推送</button>
+    </div>
+    <textarea id="n-content" placeholder="更新说明（选填）"></textarea>
+    <div id="pub-log"></div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+function token() { return $('token').value.trim() }
+function saveToken() { localStorage.setItem('adminToken', token()); log('令牌已保存') }
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'content-type': 'application/json', 'x-admin-token': token() },
+    body: body ? JSON.stringify(body) : undefined
+  })
+  const data = await res.json()
+  if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status))
+  return data
+}
+function log(msg) { $('log').textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2) }
+
+let MODELS = [], ROMS = [], PORTS = []
+
+async function loadAll() {
+  const [ov, models, ports] = await Promise.all([
+    api('/api/admin/overview'),
+    api('/api/models'),
+    api('/api/ports')
+  ])
+  $('s-models').textContent = ov.models
+  $('s-roms').textContent = ov.roms
+  $('s-ports').textContent = ov.ports
+  $('s-users').textContent = ov.users
+  $('pan-state').textContent = ov.panConfigured
+    ? ('已配置' + (ov.panLastSyncAt ? '，上次同步 ' + new Date(ov.panLastSyncAt).toLocaleString() : '，尚未同步'))
+    : '未配置 123 云盘'
+  MODELS = models.models || []
+  renderModels()
+  renderRoms()
+  renderPorts(ports.list || [])
+}
+
+function renderModels() {
+  $('models-body').innerHTML = MODELS.map(m => `
+    <tr>
+      <td>${esc(m.name)}</td><td>${esc(m.series)}</td><td>${esc(m.codename || '-')}</td><td>${m.romCount || 0}</td>
+      <td>${m.portCount || 0}</td>
+      <td><button class="danger" onclick="delModel('${m.id}')">删除</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">暂无机型</td></tr>'
+  $('r-model').innerHTML = MODELS.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
+  $('p-model').innerHTML = '<option value="">— 未指定机型 —</option>' +
+    MODELS.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
+}
+
+/** 机型下拉框的 option 列表，selectedId 为当前归属 */
+function modelOptions(selectedId) {
+  return '<option value="">— 未指定机型 —</option>' +
+    MODELS.map(m => `<option value="${m.id}"${m.id === selectedId ? ' selected' : ''}>${esc(m.name)}</option>`).join('')
+}
+
+async function loadRomsForModel() {
+  const modelId = $('r-model').value
+  if (!modelId) { ROMS = []; renderRoms(); return }
+  const d = await api('/api/models/detail?id=' + encodeURIComponent(modelId))
+  ROMS = d.roms || []
+  renderRoms()
+}
+
+function modelName(id) { const m = MODELS.find(x => x.id === id); return m ? m.name : id }
+
+function renderRoms() {
+  const list = ROMS.slice().sort((a, b) => {
+    if (!!b.manual !== !!a.manual) return b.manual ? 1 : -1
+    return String(b.release || '').localeCompare(String(a.release || ''))
+  })
+  const manualCount = list.filter(r => r.manual).length
+  $('rom-count').textContent = `共 ${list.length} 条` + (manualCount ? `，其中手动添加 ${manualCount} 条` : '')
+  $('roms-body').innerHTML = list.map(r => `
+    <tr>
+      <td>${esc(modelName(r.modelId))}</td>
+      <td>${esc(r.version)}${r.manual ? ' <span class="tag">手动</span>' : ''}</td>
+      <td>${esc(r.branch || '-')}</td>
+      <td>${esc(r.release || '-')}</td>
+      <td>${r.recoveryUrl ? '<span class="tag">有</span>' : '<span class="muted">无</span>'}</td>
+      <td>${r.fastbootUrl ? '<span class="tag">有</span>' : '<span class="muted">无</span>'}</td>
+      <td><button class="danger" onclick="delRom('${r.id}')">删除</button></td>
+    </tr>`).join('') || '<tr><td colspan="7" class="muted">该机型暂无系统包</td></tr>'
+}
+
+const PORT_KIND = { pan123: '123云盘直链', share123: '123云盘分享', manual: '手动' }
+
+function renderPorts(list) {
+  PORTS = list || []
+  $('ports-body').innerHTML = PORTS.map(p => {
+    const links = []
+    if (p.url) links.push(`<a class="url" href="${esc(p.url)}" target="_blank">直链</a>`)
+    if (p.shareUrl) links.push(`<a class="url" href="${esc(p.shareUrl)}" target="_blank">分享${p.shareCode ? '（' + esc(p.shareCode) + '）' : ''}</a>`)
+    return `
+    <tr>
+      <td><select onchange="assignPort('${p.id}', this.value)">${modelOptions(p.modelId)}</select></td>
+      <td>${esc(p.version || '-')}</td>
+      <td>${esc(p.release || '<span class="muted">未填</span>')}</td>
+      <td>${esc(p.title || '-')}</td>
+      <td><span class="tag">${PORT_KIND[p.kind] || '手动'}</span></td>
+      <td>${links.join('<br>') || '<span class="muted">无</span>'}</td>
+      <td><button class="danger" onclick="delPort('${p.id}')">删除</button></td>
+    </tr>`
+  }).join('') || '<tr><td colspan="7" class="muted">暂无移植包</td></tr>'
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
+
+async function run(fn) { try { await fn() } catch (e) { alert('失败：' + e.message) } }
+
+async function syncPan() {
+  $('syncBtn').disabled = true
+  log('开始同步 123 云盘...')
+  return run(async () => {
+    const d = await api('/api/admin/sync-pan', {})
+    log('同步完成，共 ' + d.count + ' 个移植包')
+    await loadAll()
+  }).finally(() => { $('syncBtn').disabled = false })
+}
+
+function addModel() { return run(async () => {
+  await api('/api/admin/model', { name: $('m-name').value.trim(), series: $('m-series').value.trim(), codename: $('m-code').value.trim() })
+  $('m-name').value = ''; $('m-code').value = ''
+  await loadAll()
+}) }
+
+function delModel(id) { if (!confirm('删除该机型及其更新包？')) return; return run(async () => {
+  await api('/api/admin/model/delete', { id }); await loadAll()
+}) }
+
+function addRom() { return run(async () => {
+  await api('/api/admin/rom', {
+    modelId: $('r-model').value,
+    version: $('r-ver').value.trim(),
+    branch: $('r-branch').value.trim(),
+    android: $('r-android').value.trim(),
+    recovery: $('r-recovery').value.trim(),
+    fastboot: $('r-fastboot').value.trim()
+  })
+  $('r-ver').value = ''; $('r-android').value = ''
+  $('r-recovery').value = ''; $('r-fastboot').value = ''
+  await loadAll(); await loadRomsForModel()
+}) }
+
+function delRom(id) { return run(async () => {
+  await api('/api/admin/rom/delete', { id }); await loadAll(); await loadRomsForModel()
+}) }
+
+function addPort() { return run(async () => {
+  await api('/api/admin/port', {
+    modelId: $('p-model').value,
+    version: $('p-ver').value.trim(),
+    release: $('p-release').value.trim(),
+    title: $('p-title').value.trim(),
+    url: $('p-url').value.trim(),
+    shareUrl: $('p-share').value.trim(),
+    shareCode: $('p-code').value.trim()
+  })
+  $('p-ver').value = ''; $('p-release').value = ''; $('p-title').value = ''
+  $('p-url').value = ''; $('p-share').value = ''; $('p-code').value = ''
+  await loadAll()
+}) }
+
+function assignPort(id, modelId) { return run(async () => {
+  const d = await api('/api/admin/port/model', { id, modelId })
+  log(d.modelId ? ('已归属到机型 ' + modelName(d.modelId)) : '已取消机型归属')
+  await loadAll()
+}) }
+
+function delPort(id) { if (!confirm('删除该移植包记录？')) return; return run(async () => {
+  await api('/api/admin/port/delete', { id }); await loadAll()
+}) }
+
+function publish() { return run(async () => {
+  const d = await api('/api/publish', {
+    version: $('n-ver').value.trim(), title: $('n-title').value.trim(),
+    url: $('n-url').value.trim(), content: $('n-content').value.trim()
+  })
+  $('pub-log').textContent = `版本 ${d.version} 已发布：成功 ${d.sent}，失败 ${d.failed}，跳过 ${d.skipped}（共 ${d.total} 位订阅用户）`
+}) }
+
+$('r-model').addEventListener('change', () => loadRomsForModel())
+
+;(async function init() {
+  const saved = localStorage.getItem('adminToken')
+  if (saved) $('token').value = saved
+  if (saved) await run(loadAll)
+})()
+</script>
+</body>
+</html>

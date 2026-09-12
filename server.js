@@ -18,6 +18,7 @@ const shareLink = require('./lib/share-link')
 const hyperos = require('./lib/hyperos')
 
 const ADMIN_HTML = path.join(__dirname, 'public', 'admin.html')
+const SUBMIT_HTML = path.join(__dirname, 'public', 'submit.html')
 
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj)
@@ -339,9 +340,14 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return sendJson(res, 204, {})
 
   try {
-    // ---------- 静态：管理后台 ----------
+    // ---------- 静态：管理后台 + 投稿页 ----------
     if (pathname === '/admin' || pathname === '/admin/') {
       const html = fs.readFileSync(ADMIN_HTML, 'utf8')
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      return res.end(html)
+    }
+    if (pathname === '/submit' || pathname === '/submit/') {
+      const html = fs.readFileSync(SUBMIT_HTML, 'utf8')
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       return res.end(html)
     }

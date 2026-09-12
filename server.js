@@ -14,6 +14,7 @@ const store = require('./lib/store')
 const wechat = require('./lib/wechat')
 const notify = require('./lib/notify')
 const pan123 = require('./lib/pan123')
+const shareLink = require('./lib/share-link')
 const hyperos = require('./lib/hyperos')
 
 const ADMIN_HTML = path.join(__dirname, 'public', 'admin.html')
@@ -263,19 +264,35 @@ function isPanUrl(u) {
 }
 
 /**
+ * 按分享链接的域名识别是哪个网盘，决定小程序里显示的来源标签。
+ * 之前只支持 123 云盘，分享链接一律标成 share123；现在要支持移动云盘 / 百度网盘等。
+ * kind 取值：pan123(直链) / share123 / pan139 / panBaidu / panAli / pan189 / panLanzou / shareOther / manual
+ */
+function panKindOfShare(url) {
+  const u = String(url || '')
+  if (isPanUrl(u)) return 'share123'
+  if (/139\.com/i.test(u)) return 'pan139'
+  if (/baidu\.com/i.test(u)) return 'panBaidu'
+  if (/aliyundrive\.com|alipan\.com/i.test(u)) return 'panAli'
+  if (/cloud\.189\.cn/i.test(u)) return 'pan189'
+  if (/lanzou/i.test(u)) return 'panLanzou'
+  return 'shareOther'
+}
+
+/**
  * 移植包对外输出：标出来源，供小程序区分展示。
- * - pan123   ：123 云盘的直接下载地址（开放平台同步来的临时直链，会过期）
- * - share123 ：只填了 123 云盘分享链接（长期有效，需要提取码）
- * - manual   ：手动填的其它地址
+ * - pan123  ：123 云盘的直接下载地址（开放平台同步来的临时直链，会过期）
+ * - share*  ：各网盘的分享链接（长期有效，可能需要提取码）
+ * - manual  ：手动填的其它地址
  */
 function withPortUrls(port) {
   const fromPan = !!port.panFileId || isPanUrl(port.url)
   let kind = 'manual'
   if (port.url) kind = fromPan ? 'pan123' : 'manual'
-  else if (port.shareUrl) kind = 'share123'
+  else if (port.shareUrl) kind = panKindOfShare(port.shareUrl)
   return Object.assign({}, port, {
     source: port.source || (port.panFileId ? 'pan123' : 'manual'),
-    author: port.author || 'Tian-Self',
+    author: port.author || '酷安 · Tian-Self',
     kind
   })
 }
@@ -712,12 +729,25 @@ const server = http.createServer(async (req, res) => {
           // 123 云盘分享链接（长期有效）+ 提取码，作为直链失效时的备用入口
           shareUrl: body.shareUrl || '',
           shareCode: body.shareCode || '',
-          // 移植包作者，缺省统一为 Tian-Self（历史包也按此显示）
-          author: body.author || 'Tian-Self',
-          source: body.shareUrl && !body.url ? 'share123' : 'manual',
+          // 移植包作者，缺省统一为「酷安 · Tian-Self」（历史包也按此显示）
+          author: body.author || '酷安 · Tian-Self',
+          source: body.shareUrl && !body.url ? panKindOfShare(body.shareUrl) : 'manual',
           createdAt: Date.now()
         })
         return sendJson(res, 200, { ok: true, id })
+      }
+
+      // 解析网盘分享链接：读出第一个文件/文件夹的文件名、日期、大小（供后台自动填发布日期）
+      if (pathname === '/api/admin/port/probe' && req.method === 'POST') {
+        const body = await readBody(req)
+        if (!body.shareUrl) return sendJson(res, 400, { ok: false, error: '请先填分享链接' })
+        try {
+          const info = await shareLink.probeShare(body.shareUrl)
+          return sendJson(res, 200, Object.assign({ ok: true }, info))
+        } catch (e) {
+          // 读不到不算致命错误，前端提示手填即可
+          return sendJson(res, 200, { ok: true, supported: false, reason: e.message })
+        }
       }
 
       // 给已有移植包指定 / 取消机型归属（modelId 传空字符串即取消）

@@ -3,250 +3,497 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>移植包更新 · 管理后台</title>
+<title>移植包发布 · 管理后台</title>
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f2f4f8; color: #1f2430; }
-  header { background: linear-gradient(135deg,#4a7cff,#6f5bff); color:#fff; padding: 20px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
-  header h1 { font-size: 18px; margin: 0; }
+  body { margin:0; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; background:#f2f4f8; color:#1f2430; }
+  header { background:linear-gradient(135deg,#4a7cff,#6f5bff); color:#fff; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
   header .token-box { display:flex; gap:8px; align-items:center; }
-  header input { padding: 8px 10px; border-radius: 8px; border: none; width: 240px; font-size: 13px; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
-  .cards { display:grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
-  .card { background:#fff; border-radius:12px; padding:16px; }
-  .card .num { font-size:26px; font-weight:700; color:#4a7cff; }
-  .card .lbl { font-size:13px; color:#8b90a0; margin-top:4px; }
-  section { background:#fff; border-radius:12px; padding:18px 20px; margin-bottom:18px; }
-  section h2 { font-size:15px; margin:0 0 14px; }
-  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; }
-  input, select, textarea { padding:9px 11px; border:1px solid #dfe3ec; border-radius:8px; font-size:13px; font-family:inherit; }
-  textarea { width:100%; min-height:70px; resize:vertical; }
-  button { padding:9px 16px; border:none; border-radius:8px; background:#4a7cff; color:#fff; font-size:13px; cursor:pointer; }
+  header input { padding:8px 10px; border-radius:8px; border:none; width:250px; font-size:13px; }
+  .wrap { max-width:1000px; margin:0 auto; padding:18px 16px 60px; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:#fff; border-radius:12px; padding:14px 16px; }
+  .card .num { font-size:24px; font-weight:700; color:#4a7cff; }
+  .card .lbl { font-size:12px; color:#8b90a0; margin-top:2px; }
+
+  section { background:#fff; border-radius:12px; padding:18px 20px; margin-bottom:16px; }
+  section > h2 { font-size:15px; margin:0 0 4px; }
+  .sub { font-size:12px; color:#8b90a0; margin:0 0 14px; line-height:1.6; }
+  .sub b { color:#4a7cff; font-weight:600; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 14px; }
+  @media (max-width:720px){ .grid2,.grid3 { grid-template-columns:1fr; } }
+  .field { display:flex; flex-direction:column; gap:5px; position:relative; }
+  .field label { font-size:12px; color:#6b7280; }
+  .field label .req { color:#ff5a5a; }
+  .full { grid-column:1 / -1; }
+
+  input, select, textarea { padding:9px 11px; border:1px solid #dfe3ec; border-radius:8px; font-size:13px; font-family:inherit; width:100%; background:#fff; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:#4a7cff; box-shadow:0 0 0 3px rgba(74,124,255,.12); }
+  textarea { min-height:64px; resize:vertical; }
+  button { padding:9px 16px; border:none; border-radius:8px; background:#4a7cff; color:#fff; font-size:13px; cursor:pointer; white-space:nowrap; }
+  button:hover { filter:brightness(1.06); }
   button.ghost { background:#eef1f8; color:#333; }
   button.danger { background:#ff5a5a; }
+  button.mini { padding:5px 10px; font-size:12px; border-radius:6px; }
   button:disabled { opacity:.6; cursor:not-allowed; }
+
+  /* 机型选择器 */
+  .picker { position:relative; }
+  .drop { position:absolute; z-index:30; left:0; right:0; top:calc(100% + 4px); max-height:320px; overflow:auto; background:#fff;
+          border:1px solid #dfe3ec; border-radius:10px; box-shadow:0 12px 30px rgba(31,38,135,.14); padding:6px; }
+  .drop-brand { font-size:12px; font-weight:700; color:#4a7cff; padding:8px 10px 4px; }
+  .drop-series { font-size:11px; color:#a0a6b5; padding:4px 10px; }
+  .drop-item { padding:8px 10px 8px 18px; font-size:13px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; }
+  .drop-item:hover { background:#eef2ff; }
+  .drop-item .code { color:#b7bcc9; font-size:11px; }
+  .drop-empty { padding:14px 10px; color:#a0a6b5; font-size:12px; text-align:center; }
+  .picked { display:flex; align-items:center; gap:8px; padding:9px 11px; background:#eef2ff; border-radius:8px; font-size:13px; }
+  .picked a { color:#4a7cff; cursor:pointer; font-size:12px; }
+  .pick-row { display:flex; gap:6px; align-items:center; }
+  .pick-row select { flex:1; }
+
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eef0f5; vertical-align:top; }
-  th { color:#8b90a0; font-weight:500; }
-  .tag { display:inline-block; padding:2px 8px; border-radius:20px; background:#eef1f8; color:#4a7cff; font-size:12px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid #eef0f5; vertical-align:middle; }
+  th { color:#8b90a0; font-weight:500; font-size:12px; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:20px; background:#eef1f8; color:#4a7cff; font-size:11px; }
+  .tag.g { background:#e1f5ee; color:#0f6e56; }
   .muted { color:#8b90a0; font-size:12px; }
-  .url { max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
-  #log { font-family:Consolas, monospace; font-size:12px; color:#4a5568; background:#f7f8fb; border-radius:8px; padding:10px; margin-top:10px; white-space:pre-wrap; max-height:180px; overflow:auto; }
-  .hint { font-size:12px; color:#8b90a0; margin:-6px 0 12px; }
+  #log, #pub-log { font-family:Consolas,monospace; font-size:12px; color:#4a5568; background:#f7f8fb; border-radius:8px; padding:10px; margin-top:10px; white-space:pre-wrap; }
+  #log:empty, #pub-log:empty { display:none; }
+  details { background:#fff; border-radius:12px; margin-bottom:16px; padding:0 20px; }
+  details > summary { cursor:pointer; padding:16px 0; font-size:14px; font-weight:600; list-style:none; }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary::before { content:"▸ "; color:#8b90a0; }
+  details[open] > summary::before { content:"▾ "; }
+  details .body { padding-bottom:18px; }
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .bar input { flex:1; min-width:200px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>移植包更新 · 管理后台</h1>
+  <h1>移植包发布 · 管理后台</h1>
   <div class="token-box">
-    <input id="token" placeholder="管理令牌 (config.js 里的 adminToken)">
+    <select id="api-base" onchange="onBaseChange()" title="数据源">
+      <option value="cloud">线上（正式数据）</option>
+      <option value="local">本地（本机服务）</option>
+    </select>
+    <input id="token" placeholder="管理令牌（config.js 的 adminToken）" onchange="onTokenChange()">
     <button class="ghost" onclick="saveToken()">保存令牌</button>
   </div>
 </header>
 
 <div class="wrap">
   <div class="cards">
-    <div class="card"><div class="num" id="s-models">-</div><div class="lbl">机型</div></div>
-    <div class="card"><div class="num" id="s-roms">-</div><div class="lbl">更新包</div></div>
-    <div class="card"><div class="num" id="s-ports">-</div><div class="lbl">移植包版本</div></div>
+    <div class="card"><div class="num" id="s-ports">-</div><div class="lbl">移植包</div></div>
+    <div class="card"><div class="num" id="s-authors">-</div><div class="lbl">作者</div></div>
+    <div class="card"><div class="num" id="s-models">-</div><div class="lbl">可发布机型</div></div>
     <div class="card"><div class="num" id="s-users">-</div><div class="lbl">订阅用户</div></div>
   </div>
 
+  <!-- ===================== 发布 ===================== -->
   <section>
-    <h2>123 云盘同步（移植包）</h2>
-    <div class="row">
-      <button onclick="syncPan()" id="syncBtn">立即同步移植包</button>
-      <span class="muted" id="pan-state"></span>
+    <h2 id="form-title">发布移植包</h2>
+    <p class="sub">选好机型、填上分享链接就能发布。<b>同一机型的包会按发布日期从新到旧排列</b>，发布日期建议填。</p>
+
+    <div class="grid2">
+      <div class="field full">
+        <label>机型 <span class="req">*</span> <span class="muted">（可搜机型 / 品牌 / 系列 / 代号）</span></label>
+        <div class="picker">
+          <input id="p-model-search" placeholder="例如：小米 MIX Flip、红米、unicorn…" autocomplete="off"
+                 oninput="onModelSearch()" onfocus="onModelSearch()">
+          <div id="p-model-drop" class="drop" hidden></div>
+        </div>
+        <div id="p-model-picked" class="picked" hidden></div>
+      </div>
+
+      <div class="field">
+        <label>作者 <span class="muted">（只能从列表选，新作者点 ＋ ）</span></label>
+        <div class="pick-row">
+          <select id="p-author"></select>
+          <button class="ghost mini" onclick="addAuthor()" title="新增作者">＋</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>标题</label>
+        <input id="p-title" placeholder="如：HyperOS Kirin Mod v1.0">
+      </div>
+
+      <div class="field">
+        <label>版本号 <span class="muted">（选填）</span></label>
+        <input id="p-ver" placeholder="如：1.0">
+      </div>
+
+      <div class="field">
+        <label>发布日期 <span class="muted">（建议填，列表按它排序）</span></label>
+        <input id="p-release" placeholder="2026-09-12">
+      </div>
+
+      <div class="field full">
+        <label>分享链接 <span class="muted">（123云盘 / 移动云盘 / 百度网盘… 自动识别来源）</span></label>
+        <div class="pick-row">
+          <input id="p-share" placeholder="https://…">
+          <button class="ghost" onclick="probeShareLink()" id="probeBtn" title="读取该分享里第一个文件/文件夹的日期与文件名">解析</button>
+        </div>
+        <span class="muted" id="probe-tip">粘上分享链接后点「解析」：自动填发布日期、标题和备注（123 云盘可用）</span>
+      </div>
+
+      <div class="field">
+        <label>提取码 <span class="muted">（有就填）</span></label>
+        <input id="p-code" placeholder="如：kpsg">
+      </div>
+
+      <div class="field">
+        <label>直链 <span class="muted">（选填，会过期的临时链接）</span></label>
+        <input id="p-url" placeholder="https://…">
+      </div>
+
+      <div class="field full">
+        <label>备注 / 完整文件名 <span class="muted">（选填，会在小程序详情页显示）</span></label>
+        <input id="p-content" placeholder="如：ColorOS16_For unicorn_By Kirin[DSU体验包]第三版.zip">
+      </div>
     </div>
-    <div class="hint">先在 server/config.js 配置 pan123.clientID / clientSecret / parentFileId，把移植包上传到该目录后点同步。同步只更新链接，机型归属会保留；同步后请到下方「移植包版本」里给新出现的文件指定机型。</div>
-    <div id="log"></div>
+
+    <div class="bar" style="margin-top:14px">
+      <button onclick="submitPort()" id="submitBtn">发布</button>
+      <button class="ghost" onclick="resetForm()">清空</button>
+      <span class="muted" id="form-state"></span>
+    </div>
   </section>
 
+  <!-- ===================== 列表 ===================== -->
   <section>
-    <h2>机型管理</h2>
-    <div class="row">
-      <input id="m-name" placeholder="机型名称，如 小米14">
-      <input id="m-series" placeholder="系列，如 小米数字系列" value="小米数字系列">
-      <input id="m-code" placeholder="代号（选填），如 houji">
-      <button onclick="addModel()">添加机型</button>
+    <h2>移植包列表 <span class="muted" id="list-count"></span></h2>
+    <div class="bar">
+      <input id="list-search" placeholder="搜索：机型 / 作者 / 标题" oninput="renderPorts()" autocomplete="off">
+      <button class="ghost" onclick="loadAll()">刷新</button>
     </div>
     <table>
-      <thead><tr><th>机型</th><th>系列</th><th>代号</th><th>更新包</th><th>移植包</th><th></th></tr></thead>
-      <tbody id="models-body"></tbody>
-    </table>
-  </section>
-
-  <section>
-    <h2>系统包（手动补充） <span class="muted" id="rom-count"></span></h2>
-    <div class="hint">批量数据用命令行导入：<code>node import-hyperos.js</code>（会覆盖这里导入的机型与系统包，手工补的不会被动）。这里用于单独补一条。卡刷/线刷可以只填文件名，链接会按 config.romCdnBase 自动拼。</div>
-    <div class="row">
-      <select id="r-model"></select>
-      <input id="r-ver" placeholder="版本号，如 OS3.0.306.0.WNCCNXM">
-      <input id="r-branch" placeholder="分支，如 小米澎湃 OS 正式版" value="手动添加">
-      <input id="r-android" placeholder="Android，如 16.0" style="width:120px">
-      <button onclick="addRom()">添加</button>
-    </div>
-    <div class="row">
-      <input id="r-recovery" placeholder="卡刷包：文件名或完整链接" style="flex:1;min-width:280px">
-      <input id="r-fastboot" placeholder="线刷包：文件名或完整链接" style="flex:1;min-width:280px">
-    </div>
-    <table>
-      <thead><tr><th>机型</th><th>版本</th><th>分支</th><th>日期</th><th>卡刷</th><th>线刷</th><th></th></tr></thead>
-      <tbody id="roms-body"></tbody>
-    </table>
-  </section>
-
-  <section>
-    <h2>移植包版本</h2>
-    <div class="hint">移植包必须指定机型，才会出现在小程序里该机型的「移植包下载」中；未指定机型的记录不会展示。<br><b>发布日期</b>填了就按日期从新到旧排序，不填的按添加时间排在后面。123 云盘同步来的直链是<b>带签名的临时链接</b>，会过期；建议同时填一个长期有效的分享链接 + 提取码作为备用入口，小程序会两个都给出来。</div>
-    <div class="row">
-      <select id="p-model"></select>
-      <input id="p-ver" placeholder="版本号，如 1.2.0" style="width:170px">
-      <input id="p-release" placeholder="发布日期 2026-08-01" style="width:180px">
-      <input id="p-title" placeholder="标题（选填）">
-      <button onclick="addPort()">添加</button>
-    </div>
-    <div class="row">
-      <input id="p-url" placeholder="直接下载地址（123 云盘同步会自动填这里）" style="flex:1;min-width:280px">
-      <input id="p-share" placeholder="123 云盘分享链接" style="flex:1;min-width:220px">
-      <input id="p-code" placeholder="提取码" style="width:110px">
-    </div>
-    <table>
-      <thead><tr><th>机型</th><th>版本</th><th>发布日期</th><th>标题</th><th>来源</th><th>链接</th><th></th></tr></thead>
+      <thead>
+        <tr><th>机型</th><th>作者</th><th>标题</th><th>版本</th><th>发布日期</th><th>来源</th><th>链接</th><th></th></tr>
+      </thead>
       <tbody id="ports-body"></tbody>
     </table>
   </section>
 
+  <!-- ===================== 推送 ===================== -->
   <section>
     <h2>发布更新提醒</h2>
-    <div class="row">
-      <input id="n-ver" placeholder="版本号，如 1.2.0">
-      <input id="n-title" placeholder="提醒标题">
-      <input id="n-url" placeholder="下载地址" style="flex:1;min-width:260px">
+    <p class="sub">给攒了订阅次数的用户推送一条订阅消息（<b>发布移植包本身不会推送</b>，要在这里手动触发）。</p>
+    <div class="grid3">
+      <div class="field"><label>版本号</label><input id="n-ver" placeholder="如：1.2.0"></div>
+      <div class="field"><label>提醒标题</label><input id="n-title" placeholder="如：新增 ColorOS16 移植包"></div>
+      <div class="field"><label>下载地址</label><input id="n-url" placeholder="https://…"></div>
+      <div class="field full"><label>更新说明</label><textarea id="n-content" placeholder="选填"></textarea></div>
+    </div>
+    <div class="bar" style="margin-top:12px">
       <button onclick="publish()">发布并推送</button>
     </div>
-    <textarea id="n-content" placeholder="更新说明（选填）"></textarea>
     <div id="pub-log"></div>
   </section>
+
+  <!-- ===================== 折叠区 ===================== -->
+  <details>
+    <summary>123 云盘同步（把云盘目录里的文件同步成移植包记录）</summary>
+    <div class="body">
+      <p class="sub">先在 <code>server/config.js</code> 配好 <code>pan123.clientID / clientSecret / parentFileId</code>，
+      把移植包上传到那个目录后点同步。同步只更新链接，<b>机型归属会保留</b>；同步后要给新出现的文件指定机型。</p>
+      <div class="bar">
+        <button onclick="syncPan()" id="syncBtn">立即同步</button>
+        <span class="muted" id="pan-state"></span>
+      </div>
+      <div id="log"></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>机型管理（手动加机型，一般用不到）</summary>
+    <div class="body">
+      <div class="bar">
+        <input id="m-name" placeholder="机型名称，如 小米 17 Pro Max">
+        <input id="m-series" placeholder="系列，如 小米系列" value="小米系列">
+        <input id="m-code" placeholder="代号（选填），如 popsicle">
+        <button onclick="addModel()">添加</button>
+      </div>
+      <table>
+        <thead><tr><th>机型</th><th>品牌</th><th>系列</th><th>代号</th><th>移植包</th><th></th></tr></thead>
+        <tbody id="models-body"></tbody>
+      </table>
+    </div>
+  </details>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id)
-function token() { return $('token').value.trim() }
-function saveToken() { localStorage.setItem('adminToken', token()); log('令牌已保存') }
+const token = () => $('token').value.trim()
+const CLOUD = 'https://express-l9td-312136-4-1485778694.sh.run.tcloudbase.com'
+
+/** 当前数据源：线上 = 正式数据（默认）；本地 = 本机服务，用相对路径 */
+function apiBase() { return $('api-base').value === 'local' ? '' : CLOUD }
+
+function saveToken() { localStorage.setItem('adminToken', token()); flash('令牌已保存') }
+/** 填完令牌（光标离开输入框）就自动加载一次，省得再去找刷新 */
+function onTokenChange() { if (token()) return run(loadAll) }
+function onBaseChange() {
+  localStorage.setItem('apiBase', $('api-base').value)
+  return run(loadAll)
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])) }
+
 async function api(path, body) {
-  const res = await fetch(path, {
+  const res = await fetch(apiBase() + path, {
     method: body ? 'POST' : 'GET',
     headers: { 'content-type': 'application/json', 'x-admin-token': token() },
     body: body ? JSON.stringify(body) : undefined
   })
-  const data = await res.json()
+  const data = await res.json().catch(() => ({}))
   if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status))
   return data
 }
-function log(msg) { $('log').textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2) }
+async function run(fn) { try { await fn() } catch (e) { alert('失败：' + e.message) } }
+function flash(msg) { $('form-state').textContent = msg; setTimeout(() => { $('form-state').textContent = '' }, 2600) }
 
-let MODELS = [], ROMS = [], PORTS = []
+let MODELS = [], PORTS = [], AUTHORS = [], EDIT_ID = '', PICKED_MODEL = '', PROBED_SIZE = 0
 
+/**
+ * 解析分享链接：读取里面第一个文件/文件夹的日期、文件名、大小，自动填表。
+ * 后端 /api/admin/port/probe → server/lib/share-link.js（123 云盘可用，其它网盘有风控读不到）
+ */
+async function probeShareLink() {
+  const url = $('p-share').value.trim()
+  if (!url) { alert('请先粘贴分享链接'); return }
+  $('probeBtn').disabled = true
+  $('probe-tip').textContent = '正在读取…'
+  return run(async () => {
+    const d = await api('/api/admin/port/probe', { shareUrl: url })
+    if (!d.supported) {
+      $('probe-tip').textContent = '⚠ ' + (d.reason || '读不到，请手填发布日期')
+      return
+    }
+    if (d.date) $('p-release').value = d.date
+    if (d.fileName) {
+      if (!$('p-content').value.trim()) $('p-content').value = d.fileName
+      if (!$('p-title').value.trim()) $('p-title').value = d.fileName.replace(/\.(zip|7z|rar|tar|gz|img|bin)$/i, '')
+    }
+    PROBED_SIZE = d.size || 0
+    const sizeTxt = d.size ? ' · ' + (d.size / 1024 / 1024 / 1024).toFixed(2) + ' GB' : ''
+    const extra = d.count > 1 ? '（该分享共 ' + d.count + ' 项，取第一个）' : ''
+    $('probe-tip').textContent = '✓ 发布日期 ' + (d.date || '无') + sizeTxt + (d.isDir ? ' · 文件夹' : '') + extra
+  }).finally(() => { $('probeBtn').disabled = false })
+}
+
+/* ---------------- 加载 ---------------- */
 async function loadAll() {
   const [ov, models, ports] = await Promise.all([
     api('/api/admin/overview'),
-    api('/api/models'),
+    api('/api/models?source=xr'),   // 全部机型（含 MIUI 老机型）
     api('/api/ports')
   ])
-  $('s-models').textContent = ov.models
-  $('s-roms').textContent = ov.roms
-  $('s-ports').textContent = ov.ports
-  $('s-users').textContent = ov.users
+  MODELS = models.models || []
+  PORTS = ports.list || []
+  $('s-ports').textContent = PORTS.length
+  $('s-models').textContent = MODELS.length
+  $('s-users').textContent = ov.users != null ? ov.users : '-'
+  AUTHORS = [...new Set(PORTS.map(p => p.author).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+  $('s-authors').textContent = AUTHORS.length
+  renderAuthors()
   $('pan-state').textContent = ov.panConfigured
     ? ('已配置' + (ov.panLastSyncAt ? '，上次同步 ' + new Date(ov.panLastSyncAt).toLocaleString() : '，尚未同步'))
     : '未配置 123 云盘'
-  MODELS = models.models || []
   renderModels()
-  renderRoms()
-  renderPorts(ports.list || [])
+  renderPorts()
 }
 
-function renderModels() {
-  $('models-body').innerHTML = MODELS.map(m => `
-    <tr>
-      <td>${esc(m.name)}</td><td>${esc(m.series)}</td><td>${esc(m.codename || '-')}</td><td>${m.romCount || 0}</td>
-      <td>${m.portCount || 0}</td>
-      <td><button class="danger" onclick="delModel('${m.id}')">删除</button></td>
-    </tr>`).join('') || '<tr><td colspan="6" class="muted">暂无机型</td></tr>'
-  $('r-model').innerHTML = MODELS.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
-  $('p-model').innerHTML = '<option value="">— 未指定机型 —</option>' +
-    MODELS.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
+/* ---------------- 作者（只能选，新作者用 ＋） ---------------- */
+function renderAuthors() {
+  const cur = $('p-author').value
+  $('p-author').innerHTML = '<option value="">— 请选择作者 —</option>' +
+    AUTHORS.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')
+  if (cur && AUTHORS.includes(cur)) $('p-author').value = cur
 }
 
-/** 机型下拉框的 option 列表，selectedId 为当前归属 */
-function modelOptions(selectedId) {
-  return '<option value="">— 未指定机型 —</option>' +
-    MODELS.map(m => `<option value="${m.id}"${m.id === selectedId ? ' selected' : ''}>${esc(m.name)}</option>`).join('')
+function addAuthor() {
+  const name = prompt('新增作者（建议格式：酷安 · 昵称）')
+  if (!name || !name.trim()) return
+  const v = name.trim()
+  if (!AUTHORS.includes(v)) {
+    AUTHORS.push(v)
+    AUTHORS.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+    $('s-authors').textContent = AUTHORS.length
+  }
+  renderAuthors()
+  $('p-author').value = v
 }
 
-async function loadRomsForModel() {
-  const modelId = $('r-model').value
-  if (!modelId) { ROMS = []; renderRoms(); return }
-  const d = await api('/api/models/detail?id=' + encodeURIComponent(modelId))
-  ROMS = d.roms || []
-  renderRoms()
-}
-
-function modelName(id) { const m = MODELS.find(x => x.id === id); return m ? m.name : id }
-
-function renderRoms() {
-  const list = ROMS.slice().sort((a, b) => {
-    if (!!b.manual !== !!a.manual) return b.manual ? 1 : -1
-    return String(b.release || '').localeCompare(String(a.release || ''))
+/* ---------------- 机型选择器 ---------------- */
+function onModelSearch() {
+  const kw = $('p-model-search').value.trim().toLowerCase()
+  const list = kw
+    ? MODELS.filter(m => (m.name + ' ' + (m.brand || '') + ' ' + (m.series || '') + ' ' + (m.code || '')).toLowerCase().includes(kw))
+    : MODELS
+  const groups = {}
+  list.forEach(m => {
+    const b = m.brand || '其他'
+    const s = m.series || '其他'
+    if (!groups[b]) groups[b] = {}
+    if (!groups[b][s]) groups[b][s] = []
+    groups[b][s].push(m)
   })
-  const manualCount = list.filter(r => r.manual).length
-  $('rom-count').textContent = `共 ${list.length} 条` + (manualCount ? `，其中手动添加 ${manualCount} 条` : '')
-  $('roms-body').innerHTML = list.map(r => `
-    <tr>
-      <td>${esc(modelName(r.modelId))}</td>
-      <td>${esc(r.version)}${r.manual ? ' <span class="tag">手动</span>' : ''}</td>
-      <td>${esc(r.branch || '-')}</td>
-      <td>${esc(r.release || '-')}</td>
-      <td>${r.recoveryUrl ? '<span class="tag">有</span>' : '<span class="muted">无</span>'}</td>
-      <td>${r.fastbootUrl ? '<span class="tag">有</span>' : '<span class="muted">无</span>'}</td>
-      <td><button class="danger" onclick="delRom('${r.id}')">删除</button></td>
-    </tr>`).join('') || '<tr><td colspan="7" class="muted">该机型暂无系统包</td></tr>'
+  let html = ''
+  const shown = list.slice(0, 300)
+  Object.keys(groups).forEach(b => {
+    html += `<div class="drop-brand">${esc(b)}</div>`
+    Object.keys(groups[b]).forEach(s => {
+      html += `<div class="drop-series">${esc(s)}</div>`
+      groups[b][s].forEach(m => {
+        if (!shown.includes(m)) return
+        html += `<div class="drop-item" onclick="pickModel('${m.id}')">${esc(m.name)}<span class="code">${esc(m.code || '')}</span></div>`
+      })
+    })
+  })
+  $('p-model-drop').innerHTML = html || '<div class="drop-empty">没有匹配的机型</div>'
+  $('p-model-drop').hidden = false
 }
 
-const PORT_KIND = { pan123: '123云盘直链', share123: '123云盘分享', manual: '手动' }
-
-function renderPorts(list) {
-  PORTS = list || []
-  $('ports-body').innerHTML = PORTS.map(p => {
-    const links = []
-    if (p.url) links.push(`<a class="url" href="${esc(p.url)}" target="_blank">直链</a>`)
-    if (p.shareUrl) links.push(`<a class="url" href="${esc(p.shareUrl)}" target="_blank">分享${p.shareCode ? '（' + esc(p.shareCode) + '）' : ''}</a>`)
-    return `
-    <tr>
-      <td><select onchange="assignPort('${p.id}', this.value)">${modelOptions(p.modelId)}</select></td>
-      <td>${esc(p.version || '-')}</td>
-      <td>${esc(p.release || '<span class="muted">未填</span>')}</td>
-      <td>${esc(p.title || '-')}</td>
-      <td><span class="tag">${PORT_KIND[p.kind] || '手动'}</span></td>
-      <td>${links.join('<br>') || '<span class="muted">无</span>'}</td>
-      <td><button class="danger" onclick="delPort('${p.id}')">删除</button></td>
-    </tr>`
-  }).join('') || '<tr><td colspan="7" class="muted">暂无移植包</td></tr>'
+function pickModel(id) {
+  const m = MODELS.find(x => x.id === id)
+  if (!m) return
+  PICKED_MODEL = id
+  $('p-model-picked').hidden = false
+  $('p-model-picked').innerHTML =
+    `已选：<b>${esc(m.name)}</b> <span class="muted">${esc(m.code || '')} · ${esc(m.series || '')}</span> <a onclick="clearModel()">重选</a>`
+  $('p-model-search').hidden = true
+  $('p-model-search').value = ''
+  $('p-model-drop').hidden = true
 }
 
-function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
+function clearModel() {
+  PICKED_MODEL = ''
+  $('p-model-search').hidden = false
+  $('p-model-picked').hidden = true
+  $('p-model-search').focus()
+}
 
-async function run(fn) { try { await fn() } catch (e) { alert('失败：' + e.message) } }
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.picker')) $('p-model-drop').hidden = true
+})
 
-async function syncPan() {
-  $('syncBtn').disabled = true
-  log('开始同步 123 云盘...')
+/* ---------------- 发布 / 编辑 ---------------- */
+async function submitPort() {
+  if (!PICKED_MODEL) { alert('请先选择机型'); return }
+  if (!$('p-author').value) { alert('请先选择作者（没有的话点右边的 ＋ 新增）'); return }
+  const shareUrl = $('p-share').value.trim()
+  const url = $('p-url').value.trim()
+  if (!shareUrl && !url) { alert('至少填一个下载地址（分享链接或直链）'); return }
+  $('submitBtn').disabled = true
   return run(async () => {
-    const d = await api('/api/admin/sync-pan', {})
-    log('同步完成，共 ' + d.count + ' 个移植包')
+    const body = {
+      modelId: PICKED_MODEL,
+      author: $('p-author').value.trim(),
+      title: $('p-title').value.trim(),
+      version: $('p-ver').value.trim(),
+      release: $('p-release').value.trim(),
+      shareUrl, shareCode: $('p-code').value.trim(),
+      url,
+      content: $('p-content').value.trim(),
+      size: PROBED_SIZE || ''   // 解析分享链接时顺手读到的文件大小
+    }
+    if (EDIT_ID) body.id = EDIT_ID
+    const d = await api('/api/admin/port', body)
+    flash((EDIT_ID ? '已更新 ' : '已发布 ') + d.id)
+    const keepAuthor = $('p-author').value.trim()
+    resetForm()
+    $('p-author').value = keepAuthor   // 作者一般是同一个人，连续发布时省得重填
     await loadAll()
-  }).finally(() => { $('syncBtn').disabled = false })
+  }).finally(() => { $('submitBtn').disabled = false })
+}
+
+function resetForm() {
+  EDIT_ID = ''
+  PROBED_SIZE = 0
+  $('form-title').textContent = '发布移植包'
+  $('submitBtn').textContent = '发布'
+  $('probe-tip').textContent = '粘上分享链接后点「解析」：自动填发布日期、标题和备注（123 云盘可用）'
+  ;['p-title', 'p-ver', 'p-release', 'p-share', 'p-code', 'p-url', 'p-content'].forEach(id => { $(id).value = '' })
+  clearModel()
+}
+
+function editPort(id) {
+  const p = PORTS.find(x => x.id === id)
+  if (!p) return
+  EDIT_ID = id
+  if (p.modelId) pickModel(p.modelId)
+  const a = p.author || ''
+  if (a && !AUTHORS.includes(a)) {   // 历史包里的作者可能不在候选里，先补进去
+    AUTHORS.push(a)
+    AUTHORS.sort((x, y) => x.localeCompare(y, 'zh-Hans-CN'))
+    renderAuthors()
+  }
+  $('p-author').value = a
+  $('p-title').value = p.title || ''
+  $('p-ver').value = p.version || ''
+  $('p-release').value = p.release || ''
+  $('p-share').value = p.shareUrl || ''
+  $('p-code').value = p.shareCode || ''
+  $('p-url').value = p.url || ''
+  $('p-content').value = p.content || ''
+  PROBED_SIZE = p.size || 0
+  $('form-title').textContent = '编辑移植包'
+  $('submitBtn').textContent = '保存修改'
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function delPort(id) {
+  if (!confirm('删除这条移植包记录？')) return
+  return run(async () => { await api('/api/admin/port/delete', { id }); await loadAll() })
+}
+
+/* ---------------- 列表 ---------------- */
+const KIND = { pan123: '123云盘直链', share123: '123云盘', pan139: '移动云盘', panBaidu: '百度网盘', panAli: '阿里云盘', pan189: '天翼云盘', panLanzou: '蓝奏云', shareOther: '网盘', manual: '手动' }
+
+function modelName(id) { const m = MODELS.find(x => x.id === id); return m ? m.name : (id || '') }
+
+function renderPorts() {
+  const kw = $('list-search').value.trim().toLowerCase()
+  const list = kw
+    ? PORTS.filter(p => (modelName(p.modelId) + ' ' + (p.author || '') + ' ' + (p.title || '')).toLowerCase().includes(kw))
+    : PORTS
+  $('list-count').textContent = `共 ${PORTS.length} 个` + (kw ? `，匹配 ${list.length} 个` : '')
+  $('ports-body').innerHTML = list.map(p => {
+    const links = []
+    if (p.shareUrl) links.push(`<a href="${esc(p.shareUrl)}" target="_blank" rel="noopener">分享${p.shareCode ? '（' + esc(p.shareCode) + '）' : ''}</a>`)
+    if (p.url) links.push(`<a href="${esc(p.url)}" target="_blank" rel="noopener">直链</a>`)
+    return `<tr>
+      <td>${p.modelId ? esc(modelName(p.modelId)) : '<span class="muted">未指定</span>'}</td>
+      <td>${esc(p.author || '-')}</td>
+      <td>${esc(p.title || '-')}</td>
+      <td>${esc(p.version || '-')}</td>
+      <td>${esc(p.release || '-')}</td>
+      <td><span class="tag g">${esc(KIND[p.kind] || '网盘')}</span></td>
+      <td>${links.join('<br>') || '<span class="muted">无</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="ghost mini" onclick="editPort('${p.id}')">编辑</button>
+        <button class="danger mini" onclick="delPort('${p.id}')">删除</button>
+      </td>
+    </tr>`
+  }).join('') || '<tr><td colspan="8" class="muted">没有匹配的移植包</td></tr>'
+}
+
+/* ---------------- 机型管理（折叠区） ---------------- */
+function renderModels() {
+  const list = MODELS.slice().sort((a, b) => (b.portCount || 0) - (a.portCount || 0) || String(a.name).localeCompare(String(b.name), 'zh-Hans-CN'))
+  $('models-body').innerHTML = list.slice(0, 500).map(m => `
+    <tr>
+      <td>${esc(m.name)}</td><td>${esc(m.brand || '-')}</td><td>${esc(m.series || '-')}</td>
+      <td>${esc(m.code || '-')}</td><td>${m.portCount || 0}</td>
+      <td><button class="danger mini" onclick="delModel('${m.id}')">删除</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">暂无机型</td></tr>'
 }
 
 function addModel() { return run(async () => {
@@ -255,52 +502,21 @@ function addModel() { return run(async () => {
   await loadAll()
 }) }
 
-function delModel(id) { if (!confirm('删除该机型及其更新包？')) return; return run(async () => {
-  await api('/api/admin/model/delete', { id }); await loadAll()
-}) }
+function delModel(id) {
+  if (!confirm('删除该机型？它名下的官方包记录会一起删掉。')) return
+  return run(async () => { await api('/api/admin/model/delete', { id }); await loadAll() })
+}
 
-function addRom() { return run(async () => {
-  await api('/api/admin/rom', {
-    modelId: $('r-model').value,
-    version: $('r-ver').value.trim(),
-    branch: $('r-branch').value.trim(),
-    android: $('r-android').value.trim(),
-    recovery: $('r-recovery').value.trim(),
-    fastboot: $('r-fastboot').value.trim()
-  })
-  $('r-ver').value = ''; $('r-android').value = ''
-  $('r-recovery').value = ''; $('r-fastboot').value = ''
-  await loadAll(); await loadRomsForModel()
-}) }
-
-function delRom(id) { return run(async () => {
-  await api('/api/admin/rom/delete', { id }); await loadAll(); await loadRomsForModel()
-}) }
-
-function addPort() { return run(async () => {
-  await api('/api/admin/port', {
-    modelId: $('p-model').value,
-    version: $('p-ver').value.trim(),
-    release: $('p-release').value.trim(),
-    title: $('p-title').value.trim(),
-    url: $('p-url').value.trim(),
-    shareUrl: $('p-share').value.trim(),
-    shareCode: $('p-code').value.trim()
-  })
-  $('p-ver').value = ''; $('p-release').value = ''; $('p-title').value = ''
-  $('p-url').value = ''; $('p-share').value = ''; $('p-code').value = ''
-  await loadAll()
-}) }
-
-function assignPort(id, modelId) { return run(async () => {
-  const d = await api('/api/admin/port/model', { id, modelId })
-  log(d.modelId ? ('已归属到机型 ' + modelName(d.modelId)) : '已取消机型归属')
-  await loadAll()
-}) }
-
-function delPort(id) { if (!confirm('删除该移植包记录？')) return; return run(async () => {
-  await api('/api/admin/port/delete', { id }); await loadAll()
-}) }
+/* ---------------- 其它 ---------------- */
+async function syncPan() {
+  $('syncBtn').disabled = true
+  $('log').textContent = '开始同步 123 云盘…'
+  return run(async () => {
+    const d = await api('/api/admin/sync-pan', {})
+    $('log').textContent = '同步完成，共 ' + d.count + ' 个移植包'
+    await loadAll()
+  }).finally(() => { $('syncBtn').disabled = false })
+}
 
 function publish() { return run(async () => {
   const d = await api('/api/publish', {
@@ -310,11 +526,13 @@ function publish() { return run(async () => {
   $('pub-log').textContent = `版本 ${d.version} 已发布：成功 ${d.sent}，失败 ${d.failed}，跳过 ${d.skipped}（共 ${d.total} 位订阅用户）`
 }) }
 
-$('r-model').addEventListener('change', () => loadRomsForModel())
-
 ;(async function init() {
+  const base = localStorage.getItem('apiBase')
+  if (base) $('api-base').value = base
   const saved = localStorage.getItem('adminToken')
   if (saved) $('token').value = saved
+  const today = new Date()
+  $('p-release').value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
   if (saved) await run(loadAll)
 })()
 </script>

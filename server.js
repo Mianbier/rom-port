@@ -275,6 +275,7 @@ function withPortUrls(port) {
   else if (port.shareUrl) kind = 'share123'
   return Object.assign({}, port, {
     source: port.source || (port.panFileId ? 'pan123' : 'manual'),
+    author: port.author || 'Tian-Self',
     kind
   })
 }
@@ -711,6 +712,8 @@ const server = http.createServer(async (req, res) => {
           // 123 云盘分享链接（长期有效）+ 提取码，作为直链失效时的备用入口
           shareUrl: body.shareUrl || '',
           shareCode: body.shareCode || '',
+          // 移植包作者，缺省统一为 Tian-Self（历史包也按此显示）
+          author: body.author || 'Tian-Self',
           source: body.shareUrl && !body.url ? 'share123' : 'manual',
           createdAt: Date.now()
         })

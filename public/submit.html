@@ -203,7 +203,7 @@ async function enter() {
   $('enterBtn').disabled = true
   $('gate-err').textContent = ''
   try {
-    await api('/api/submit/check')
+    await api('/api/submit/check', {})
     localStorage.setItem('submitToken', v)
     $('gate').hidden = true
     $('main').hidden = false
@@ -392,7 +392,7 @@ function renderPorts() {
     $('gate').hidden = true
     $('main').hidden = false
     run(async () => {
-      await api('/api/submit/check')
+      await api('/api/submit/check', {})
       await loadAll()
     }).catch(() => { /* 校验失败时 loadAll 会抛，手动回退到口令门 */ })
   } else {

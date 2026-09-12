@@ -838,7 +838,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 投稿页进入时校验口令
-    if (pathname === '/api/submit/check' && req.method === 'POST') {
+    if (pathname === '/api/submit/check' && (req.method === 'POST' || req.method === 'GET')) {
       if (!(await isSubmitter(req))) return sendJson(res, 401, { ok: false, error: '投稿口令不正确' })
       return sendJson(res, 200, { ok: true })
     }

@@ -92,17 +92,46 @@ async function currentFieldMap() {
 const REFRESH_TTL = 30 * 60 * 1000 // 30 分钟：机型数据超过这个时间没更新就自动刷新（官方出新包 30 分钟内可见）
 const refreshing = new Set() // 正在刷新的机型（防止并发重复抓）
 
-/** 抓取并覆盖某机型的全部系统包（保留手动新增的） */
+/** 抓取并覆盖某机型的全部系统包（保留手动新增的）。
+ *  顺带做「新版本检测」：和旧列表比对，出现新 rom 就给订阅了该机型的用户推送（每机型独立）。 */
 async function refreshModel(model) {
   if (!model || !model.code) return 0
   const { roms } = await hyperos.fetchDeviceRoms(model.code)
+  // 刷新前记一下已有的版本 id，用于 diff 出新版本
+  let oldIds = null
+  try {
+    const old = await store.getRoms(model.id)
+    oldIds = new Set((old || []).map((r) => r.id))
+  } catch (e) { /* 读不到旧列表就跳过本次推送检测 */ }
   const n = await store.replaceModelRoms(model.id, roms)
   await store.setKv('rf:' + model.id, String(Date.now()))
+  // 后台推送：不阻塞刷新本身，出错也不影响接口
+  if (oldIds) {
+    const fresh = (roms || []).filter((r) => !oldIds.has(r.id))
+    if (fresh.length) {
+      notify
+        .publishModel(model, 'rom', fresh[0])
+        .then((r) => console.log(`[notify] ${model.id} 新版本推送: 发${r.sent}/失败${r.failed}/跳过${r.skipped}`))
+        .catch((e) => console.log('[notify] 推送失败:', e.message))
+    }
+  }
   return n
 }
 
-/** 带并发保护的刷新：同一机型同一时间只抓一次 */
-async function refreshModelOnce(model) {
+/** 新移植包上架 → 给订阅了该机型的用户推送（fire-and-forget，出错不影响发布本身） */
+function notifyNewPort(modelId, port) {
+  store
+    .getModel(modelId)
+    .then((model) => {
+      if (!model) return
+      return notify.publishModel(model, 'port', port).then((r) =>
+        console.log(`[notify] ${modelId} 新移植包推送: 发${r.sent}/失败${r.failed}/跳过${r.skipped}`)
+      )
+    })
+    .catch((e) => console.log('[notify] 推送失败:', e.message))
+}
+
+/** 带并发保护的刷新：同一机型同一时间只抓一次 */async function refreshModelOnce(model) {
   if (!model || !model.code || refreshing.has(model.id)) return 0
   refreshing.add(model.id)
   try {
@@ -372,8 +401,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/subscribe' && req.method === 'POST') {
-      const openid = headerOpenid(req) || (await readBody(req)).openid
+      const body = await readBody(req)
+      const openid = headerOpenid(req) || body.openid
       if (!openid) return sendJson(res, 400, { ok: false, error: '缺少 openid' })
+      // 带 modelId = 订阅「这个机型」的更新（机型级独立推送）；不带 = 全局订阅（老行为）
+      if (body.modelId) {
+        const row = await store.addModelSub(openid, String(body.modelId))
+        return sendJson(res, 200, { ok: true, modelId: body.modelId, quota: (row && row.quota) || 1 })
+      }
       const user = await store.addSubscription(openid)
       return sendJson(res, 200, { ok: true, quota: user.quota })
     }
@@ -754,6 +789,10 @@ const server = http.createServer(async (req, res) => {
           source: body.shareUrl && !body.url ? panKindOfShare(body.shareUrl) : 'manual',
           createdAt: Date.now()
         })
+        // 新增（非编辑）且指定了机型 → 给订阅该机型的用户推送
+        if (!body.id && body.modelId) {
+          notifyNewPort(body.modelId, { id, title: body.title || '', version: body.version || '' })
+        }
         return sendJson(res, 200, { ok: true, id })
       }
 
@@ -821,6 +860,8 @@ const server = http.createServer(async (req, res) => {
         source: body.shareUrl && !body.url ? panKindOfShare(body.shareUrl) : 'manual',
         createdAt: Date.now()
       })
+      // 投稿成功 → 给订阅该机型的用户推送
+      if (body.modelId) notifyNewPort(body.modelId, { id, title: body.title || '', version: body.version || '' })
       return sendJson(res, 200, { ok: true, id })
     }
 

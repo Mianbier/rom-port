@@ -60,6 +60,13 @@ module.exports = {
   // 调用发布接口需要的管理令牌，自己随便改成一串别人猜不到的字符
   adminToken: 'change-this-to-a-random-token',
 
+  /**
+   * 投稿页（/submit）的访问口令 —— 给外部作者投稿用
+   * 访问 https://<域名>/submit 时要先输入它；投稿页只能新增、不能改也不能删。
+   * 优先级：kv 的 submitToken（可在管理接口写，不用改代码） > 环境变量 SUBMIT_TOKEN > 这里
+   */
+  submitToken: process.env.SUBMIT_TOKEN || 'tougao2026',
+
   // 推送消息的环境：developer=开发版, trial=体验版, formal=正式版
   // 测试阶段用 developer，正式上线改成 formal
   miniprogramState: 'developer',

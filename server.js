@@ -24,7 +24,7 @@ function sendJson(res, status, obj) {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'content-type, x-admin-token',
+    'access-control-allow-headers': 'content-type, x-admin-token, x-submit-token',
     'access-control-allow-methods': 'GET, POST, OPTIONS'
   })
   res.end(body)
@@ -51,6 +51,20 @@ function readBody(req) {
 
 function isAdmin(req) {
   return req.headers['x-admin-token'] === config.adminToken
+}
+
+/** 投稿口令：优先 kv 的 submitToken，其次环境变量，最后 config.js 默认值 */
+async function currentSubmitToken() {
+  try {
+    const kv = await store.getKv('submitToken')
+    if (kv) return kv
+  } catch (e) { /* 忽略，回落到 config */ }
+  return config.submitToken
+}
+
+async function isSubmitter(req) {
+  const token = req.headers['x-submit-token']
+  return !!token && token === await currentSubmitToken()
 }
 
 /** 打码 AppSecret，接口里只回显首尾几位 */
@@ -748,6 +762,59 @@ const server = http.createServer(async (req, res) => {
           // 读不到不算致命错误，前端提示手填即可
           return sendJson(res, 200, { ok: true, supported: false, reason: e.message })
         }
+      }
+
+      // ===== 投稿（外部作者，走 /submit 页）=====
+      // 校验投稿口令后只允许【新增】移植包：不接受 id（无法覆盖/编辑已有包）、不能删除；
+      // 作者必须从已有作者里选（防止绕过前端下拉）。投稿成功即直接进正式列表。
+      if (pathname === '/api/submit/port' && req.method === 'POST') {
+        if (!(await isSubmitter(req))) return sendJson(res, 401, { ok: false, error: '投稿口令不正确' })
+        const body = await readBody(req)
+        const hasAnything = body.version || body.title || body.url || body.shareUrl
+        if (!hasAnything) return sendJson(res, 400, { ok: false, error: '至少要填版本号、标题或一个下载地址' })
+        // 作者必须从已有作者里选
+        const all = await store.getPorts()
+        const knownAuthors = new Set((all || []).map((p) => p.author).filter(Boolean))
+        const author = String(body.author || '').trim()
+        if (!knownAuthors.has(author)) {
+          return sendJson(res, 400, { ok: false, error: '作者必须从已有作者里选（当前没有「' + author + '」）' })
+        }
+        const id = `p-${Date.now().toString(36)}`
+        await store.upsertPort({
+          id,
+          modelId: body.modelId || '',
+          version: body.version || '',
+          title: body.title || (body.version ? `移植包 ${body.version}` : '移植包'),
+          content: body.content || '',
+          size: body.size || '',
+          release: body.release || '',
+          url: body.url || '',
+          shareUrl: body.shareUrl || '',
+          shareCode: body.shareCode || '',
+          author,
+          source: body.shareUrl && !body.url ? panKindOfShare(body.shareUrl) : 'manual',
+          createdAt: Date.now()
+        })
+        return sendJson(res, 200, { ok: true, id })
+      }
+
+      // 投稿页的「解析」按钮：校验投稿口令后解析分享链接（读日期/文件名/大小）
+      if (pathname === '/api/submit/probe' && req.method === 'POST') {
+        if (!(await isSubmitter(req))) return sendJson(res, 401, { ok: false, error: '投稿口令不正确' })
+        const body = await readBody(req)
+        if (!body.shareUrl) return sendJson(res, 400, { ok: false, error: '请先填分享链接' })
+        try {
+          const info = await shareLink.probeShare(body.shareUrl)
+          return sendJson(res, 200, Object.assign({ ok: true }, info))
+        } catch (e) {
+          return sendJson(res, 200, { ok: true, supported: false, reason: e.message })
+        }
+      }
+
+      // 投稿页进入时校验口令（口令对 → 200，错 → 401）
+      if (pathname === '/api/submit/check' && req.method === 'POST') {
+        if (!(await isSubmitter(req))) return sendJson(res, 401, { ok: false, error: '投稿口令不正确' })
+        return sendJson(res, 200, { ok: true })
       }
 
       // 给已有移植包指定 / 取消机型归属（modelId 传空字符串即取消）

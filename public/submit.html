@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>移植包投稿</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; background:#f2f4f8; color:#1f2430; }
+  header { background:linear-gradient(135deg,#4a7cff,#6f5bff); color:#fff; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  header .token-box { display:flex; gap:8px; align-items:center; }
+  header input { padding:8px 10px; border-radius:8px; border:none; width:220px; font-size:13px; }
+  .wrap { max-width:1000px; margin:0 auto; padding:18px 16px 60px; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:#fff; border-radius:12px; padding:14px 16px; }
+  .card .num { font-size:24px; font-weight:700; color:#4a7cff; }
+  .card .lbl { font-size:12px; color:#8b90a0; margin-top:2px; }
+
+  section { background:#fff; border-radius:12px; padding:18px 20px; margin-bottom:16px; }
+  section > h2 { font-size:15px; margin:0 0 4px; }
+  .sub { font-size:12px; color:#8b90a0; margin:0 0 14px; line-height:1.6; }
+  .sub b { color:#e07a2f; font-weight:600; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+  @media (max-width:720px){ .grid2 { grid-template-columns:1fr; } }
+  .field { display:flex; flex-direction:column; gap:5px; position:relative; }
+  .field label { font-size:12px; color:#6b7280; }
+  .field label .req { color:#ff5a5a; }
+  .full { grid-column:1 / -1; }
+
+  input, select, textarea { padding:9px 11px; border:1px solid #dfe3ec; border-radius:8px; font-size:13px; font-family:inherit; width:100%; background:#fff; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:#4a7cff; box-shadow:0 0 0 3px rgba(74,124,255,.12); }
+  button { padding:9px 16px; border:none; border-radius:8px; background:#4a7cff; color:#fff; font-size:13px; cursor:pointer; white-space:nowrap; }
+  button:hover { filter:brightness(1.06); }
+  button.ghost { background:#eef1f8; color:#333; }
+  button:disabled { opacity:.6; cursor:not-allowed; }
+
+  .picker { position:relative; }
+  .drop { position:absolute; z-index:30; left:0; right:0; top:calc(100% + 4px); max-height:320px; overflow:auto; background:#fff;
+          border:1px solid #dfe3ec; border-radius:10px; box-shadow:0 12px 30px rgba(31,38,135,.14); padding:6px; }
+  .drop-brand { font-size:12px; font-weight:700; color:#4a7cff; padding:8px 10px 4px; }
+  .drop-series { font-size:11px; color:#a0a6b5; padding:4px 10px; }
+  .drop-item { padding:8px 10px 8px 18px; font-size:13px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; }
+  .drop-item:hover { background:#eef2ff; }
+  .drop-item .code { color:#b7bcc9; font-size:11px; }
+  .drop-empty { padding:14px 10px; color:#a0a6b5; font-size:12px; text-align:center; }
+  .picked { display:flex; align-items:center; gap:8px; padding:9px 11px; background:#eef2ff; border-radius:8px; font-size:13px; }
+  .picked a { color:#4a7cff; cursor:pointer; font-size:12px; }
+  .pick-row { display:flex; gap:6px; align-items:center; }
+  .pick-row select { flex:1; }
+  .pick-row input { flex:1; }
+
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid #eef0f5; vertical-align:middle; }
+  th { color:#8b90a0; font-weight:500; font-size:12px; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:20px; background:#eef1f8; color:#4a7cff; font-size:11px; }
+  .tag.g { background:#e1f5ee; color:#0f6e56; }
+  .muted { color:#8b90a0; font-size:12px; }
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .bar input { flex:1; min-width:200px; }
+  .err { color:#e5484d; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>移植包投稿</h1>
+  <div class="token-box">
+    <input id="pass" type="password" placeholder="投稿口令" onkeydown="if(event.key==='Enter')enter()">
+    <button class="ghost" onclick="enter()" id="enterBtn">进入</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- 口令门 -->
+  <section id="gate" hidden>
+    <h2>需要投稿口令</h2>
+    <p class="sub">这是给移植包作者投稿用的页面。提交的包会<b>立即上线</b>、且<b>不能修改或删除</b>，请核对无误再提交。</p>
+    <div class="bar">
+      <input id="pass2" type="password" placeholder="请输入投稿口令" onkeydown="if(event.key==='Enter')enter()">
+      <button onclick="enter()">进入</button>
+    </div>
+    <div class="err" id="gate-err"></div>
+  </section>
+
+  <!-- 主界面 -->
+  <div id="main" hidden>
+    <div class="cards">
+      <div class="card"><div class="num" id="s-ports">-</div><div class="lbl">已发布移植包</div></div>
+      <div class="card"><div class="num" id="s-authors">-</div><div class="lbl">可选作者</div></div>
+      <div class="card"><div class="num" id="s-models">-</div><div class="lbl">可发布机型</div></div>
+    </div>
+
+    <section>
+      <h2>提交移植包</h2>
+      <p class="sub">选好机型、填上分享链接即可提交。<b>提交后立即上线，无法修改或删除</b>，请核对无误再点提交。</p>
+
+      <div class="grid2">
+        <div class="field full">
+          <label>机型 <span class="req">*</span> <span class="muted">（可搜机型 / 品牌 / 系列 / 代号）</span></label>
+          <div class="picker">
+            <input id="p-model-search" placeholder="例如：小米 MIX Flip、红米、unicorn…" autocomplete="off"
+                   oninput="onModelSearch()" onfocus="onModelSearch()">
+            <div id="p-model-drop" class="drop" hidden></div>
+          </div>
+          <div id="p-model-picked" class="picked" hidden></div>
+        </div>
+
+        <div class="field">
+          <label>作者 <span class="muted">（只能从列表选）</span></label>
+          <select id="p-author"></select>
+        </div>
+
+        <div class="field">
+          <label>标题</label>
+          <input id="p-title" placeholder="如：HyperOS Kirin Mod v1.0">
+        </div>
+
+        <div class="field">
+          <label>版本号 <span class="muted">（选填）</span></label>
+          <input id="p-ver" placeholder="如：1.0">
+        </div>
+
+        <div class="field">
+          <label>发布日期 <span class="muted">（列表按它排序）</span></label>
+          <input id="p-release" placeholder="2026-09-12">
+        </div>
+
+        <div class="field full">
+          <label>分享链接 <span class="muted">（123云盘 / 移动云盘 / 百度网盘… 自动识别来源）</span></label>
+          <div class="pick-row">
+            <input id="p-share" placeholder="https://…">
+            <button class="ghost" onclick="probeShareLink()" id="probeBtn" title="读取该分享里第一个文件的日期与文件名">解析</button>
+          </div>
+          <span class="muted" id="probe-tip">粘上分享链接后点「解析」：自动填发布日期、标题和备注（123 云盘可用）</span>
+        </div>
+
+        <div class="field">
+          <label>提取码 <span class="muted">（有就填）</span></label>
+          <input id="p-code" placeholder="如：kpsg">
+        </div>
+
+        <div class="field">
+          <label>直链 <span class="muted">（选填，会过期的临时链接）</span></label>
+          <input id="p-url" placeholder="https://…">
+        </div>
+
+        <div class="field full">
+          <label>备注 / 完整文件名 <span class="muted">（选填，会在小程序详情页显示）</span></label>
+          <input id="p-content" placeholder="如：ColorOS16_For unicorn_By Kirin[DSU体验包]第三版.zip">
+        </div>
+      </div>
+
+      <div class="bar" style="margin-top:14px">
+        <button onclick="submitPort()" id="submitBtn">提交</button>
+        <button class="ghost" onclick="resetForm()">清空</button>
+        <span class="muted" id="form-state"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>已发布的移植包 <span class="muted" id="list-count"></span></h2>
+      <div class="bar">
+        <input id="list-search" placeholder="搜索：机型 / 作者 / 标题" oninput="renderPorts()" autocomplete="off">
+        <button class="ghost" onclick="loadAll()">刷新</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>机型</th><th>作者</th><th>标题</th><th>版本</th><th>发布日期</th><th>来源</th><th>链接</th></tr>
+        </thead>
+        <tbody id="ports-body"></tbody>
+      </table>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const CLOUD = 'https://express-l9td-312136-4-1485778694.sh.run.tcloudbase.com'
+let TOKEN = localStorage.getItem('submitToken') || ''
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])) }
+
+async function api(path, body) {
+  const res = await fetch(CLOUD + path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'content-type': 'application/json', 'x-submit-token': TOKEN },
+    body: body ? JSON.stringify(body) : undefined
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + res.status))
+  return data
+}
+async function run(fn) { try { await fn() } catch (e) { alert('失败：' + e.message) } }
+function flash(msg) { $('form-state').textContent = msg; setTimeout(() => { $('form-state').textContent = '' }, 2600) }
+
+/* ---------------- 口令门 ---------------- */
+async function enter() {
+  const v = (($('pass') && $('pass').value) || ($('pass2') && $('pass2').value) || '').trim()
+  if (!v) { $('gate-err').textContent = '请输入口令'; return }
+  TOKEN = v
+  $('enterBtn').disabled = true
+  $('gate-err').textContent = ''
+  try {
+    await api('/api/submit/check')
+    localStorage.setItem('submitToken', v)
+    $('gate').hidden = true
+    $('main').hidden = false
+    await loadAll()
+  } catch (e) {
+    TOKEN = ''
+    $('gate').hidden = false
+    $('gate-err').textContent = '口令不正确'
+  } finally {
+    $('enterBtn').disabled = false
+  }
+}
+
+/* ---------------- 数据加载 ---------------- */
+let MODELS = [], PORTS = [], AUTHORS = [], PICKED_MODEL = '', PROBED_SIZE = 0
+
+async function loadAll() {
+  const [models, ports] = await Promise.all([
+    api('/api/models?source=xr'),
+    api('/api/ports')
+  ])
+  MODELS = models.models || []
+  PORTS = ports.list || []
+  $('s-ports').textContent = PORTS.length
+  $('s-models').textContent = MODELS.length
+  AUTHORS = [...new Set(PORTS.map(p => p.author).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+  $('s-authors').textContent = AUTHORS.length
+  renderAuthors()
+  renderPorts()
+}
+
+function renderAuthors() {
+  const cur = $('p-author').value
+  $('p-author').innerHTML = '<option value="">— 请选择作者 —</option>' +
+    AUTHORS.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')
+  if (cur && AUTHORS.includes(cur)) $('p-author').value = cur
+}
+
+/* ---------------- 机型选择器 ---------------- */
+function onModelSearch() {
+  const kw = $('p-model-search').value.trim().toLowerCase()
+  const list = kw
+    ? MODELS.filter(m => (m.name + ' ' + (m.brand || '') + ' ' + (m.series || '') + ' ' + (m.code || '')).toLowerCase().includes(kw))
+    : MODELS
+  const groups = {}
+  list.forEach(m => {
+    const b = m.brand || '其他'
+    const s = m.series || '其他'
+    if (!groups[b]) groups[b] = {}
+    if (!groups[b][s]) groups[b][s] = []
+    groups[b][s].push(m)
+  })
+  const shown = list.slice(0, 300)
+  let html = ''
+  Object.keys(groups).forEach(b => {
+    html += `<div class="drop-brand">${esc(b)}</div>`
+    Object.keys(groups[b]).forEach(s => {
+      html += `<div class="drop-series">${esc(s)}</div>`
+      groups[b][s].forEach(m => {
+        if (!shown.includes(m)) return
+        html += `<div class="drop-item" onclick="pickModel('${m.id}')">${esc(m.name)}<span class="code">${esc(m.code || '')}</span></div>`
+      })
+    })
+  })
+  $('p-model-drop').innerHTML = html || '<div class="drop-empty">没有匹配的机型</div>'
+  $('p-model-drop').hidden = false
+}
+
+function pickModel(id) {
+  const m = MODELS.find(x => x.id === id)
+  if (!m) return
+  PICKED_MODEL = id
+  $('p-model-picked').hidden = false
+  $('p-model-picked').innerHTML =
+    `已选：<b>${esc(m.name)}</b> <span class="muted">${esc(m.code || '')} · ${esc(m.series || '')}</span> <a onclick="clearModel()">重选</a>`
+  $('p-model-search').hidden = true
+  $('p-model-search').value = ''
+  $('p-model-drop').hidden = true
+}
+
+function clearModel() {
+  PICKED_MODEL = ''
+  $('p-model-search').hidden = false
+  $('p-model-picked').hidden = true
+  $('p-model-search').focus()
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.picker')) $('p-model-drop').hidden = true
+})
+
+/* ---------------- 解析分享链接 ---------------- */
+async function probeShareLink() {
+  const url = $('p-share').value.trim()
+  if (!url) { alert('请先粘贴分享链接'); return }
+  $('probeBtn').disabled = true
+  $('probe-tip').textContent = '正在读取…'
+  return run(async () => {
+    const d = await api('/api/submit/probe', { shareUrl: url })
+    if (!d.supported) {
+      $('probe-tip').textContent = '⚠ ' + (d.reason || '读不到，请手填发布日期')
+      return
+    }
+    if (d.date) $('p-release').value = d.date
+    if (d.fileName) {
+      if (!$('p-content').value.trim()) $('p-content').value = d.fileName
+      if (!$('p-title').value.trim()) $('p-title').value = d.fileName.replace(/\.(zip|7z|rar|tar|gz|img|bin)$/i, '')
+    }
+    PROBED_SIZE = d.size || 0
+    const sizeTxt = d.size ? ' · ' + (d.size / 1024 / 1024 / 1024).toFixed(2) + ' GB' : ''
+    const extra = d.count > 1 ? '（该分享共 ' + d.count + ' 项，取第一个）' : ''
+    $('probe-tip').textContent = '✓ 发布日期 ' + (d.date || '无') + sizeTxt + (d.isDir ? ' · 文件夹' : '') + extra
+  }).finally(() => { $('probeBtn').disabled = false })
+}
+
+/* ---------------- 提交 ---------------- */
+async function submitPort() {
+  if (!PICKED_MODEL) { alert('请先选择机型'); return }
+  if (!$('p-author').value) { alert('请先选择作者'); return }
+  const shareUrl = $('p-share').value.trim()
+  const url = $('p-url').value.trim()
+  if (!shareUrl && !url) { alert('至少填一个下载地址（分享链接或直链）'); return }
+  $('submitBtn').disabled = true
+  return run(async () => {
+    const body = {
+      modelId: PICKED_MODEL,
+      author: $('p-author').value.trim(),
+      title: $('p-title').value.trim(),
+      version: $('p-ver').value.trim(),
+      release: $('p-release').value.trim(),
+      shareUrl, shareCode: $('p-code').value.trim(),
+      url,
+      content: $('p-content').value.trim(),
+      size: PROBED_SIZE || ''
+    }
+    const d = await api('/api/submit/port', body)
+    flash('已提交 ' + d.id)
+    const keepAuthor = $('p-author').value.trim()
+    resetForm()
+    $('p-author').value = keepAuthor
+    await loadAll()
+  }).finally(() => { $('submitBtn').disabled = false })
+}
+
+function resetForm() {
+  PROBED_SIZE = 0
+  $('probe-tip').textContent = '粘上分享链接后点「解析」：自动填发布日期、标题和备注（123 云盘可用）'
+  ;['p-title', 'p-ver', 'p-release', 'p-share', 'p-code', 'p-url', 'p-content'].forEach(id => { $(id).value = '' })
+  clearModel()
+}
+
+/* ---------------- 列表（只读） ---------------- */
+const KIND = { pan123: '123云盘直链', share123: '123云盘', pan139: '移动云盘', panBaidu: '百度网盘', panAli: '阿里云盘', pan189: '天翼云盘', panLanzou: '蓝奏云', shareOther: '网盘', manual: '手动' }
+
+function modelName(id) { const m = MODELS.find(x => x.id === id); return m ? m.name : (id || '') }
+
+function renderPorts() {
+  const kw = $('list-search').value.trim().toLowerCase()
+  const list = kw
+    ? PORTS.filter(p => (modelName(p.modelId) + ' ' + (p.author || '') + ' ' + (p.title || '')).toLowerCase().includes(kw))
+    : PORTS
+  $('list-count').textContent = `共 ${PORTS.length} 个` + (kw ? `，匹配 ${list.length} 个` : '')
+  $('ports-body').innerHTML = list.map(p => {
+    const links = []
+    if (p.shareUrl) links.push(`<a href="${esc(p.shareUrl)}" target="_blank" rel="noopener">分享${p.shareCode ? '（' + esc(p.shareCode) + '）' : ''}</a>`)
+    if (p.url) links.push(`<a href="${esc(p.url)}" target="_blank" rel="noopener">直链</a>`)
+    return `<tr>
+      <td>${p.modelId ? esc(modelName(p.modelId)) : '<span class="muted">未指定</span>'}</td>
+      <td>${esc(p.author || '-')}</td>
+      <td>${esc(p.title || '-')}</td>
+      <td>${esc(p.version || '-')}</td>
+      <td>${esc(p.release || '-')}</td>
+      <td><span class="tag g">${esc(KIND[p.kind] || '网盘')}</span></td>
+      <td>${links.join('<br>') || '<span class="muted">无</span>'}</td>
+    </tr>`
+  }).join('') || '<tr><td colspan="7" class="muted">没有匹配的移植包</td></tr>'
+}
+
+/* ---------------- 启动 ---------------- */
+;(function init() {
+  const today = new Date()
+  $('p-release').value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
+  if (TOKEN) {
+    // 已有口令，直接尝试进入（口令失效会自动落到口令门）
+    $('gate').hidden = true
+    $('main').hidden = false
+    run(async () => {
+      await api('/api/submit/check')
+      await loadAll()
+    }).catch(() => { /* 校验失败时 loadAll 会抛，手动回退到口令门 */ })
+  } else {
+    $('gate').hidden = false
+  }
+})()
+</script>
+</body>
+</html>

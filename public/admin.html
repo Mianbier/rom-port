@@ -37,7 +37,6 @@
   button { padding:9px 16px; border:none; border-radius:8px; background:#4a7cff; color:#fff; font-size:13px; cursor:pointer; white-space:nowrap; }
   button:hover { filter:brightness(1.06); }
   button.ghost { background:#eef1f8; color:#333; }
-  button.danger { background:#ff5a5a; }
   button.mini { padding:5px 10px; font-size:12px; border-radius:6px; }
   button:disabled { opacity:.6; cursor:not-allowed; }
 
@@ -221,7 +220,7 @@
         <button onclick="addModel()">添加</button>
       </div>
       <table>
-        <thead><tr><th>机型</th><th>品牌</th><th>系列</th><th>代号</th><th>移植包</th><th></th></tr></thead>
+        <thead><tr><th>机型</th><th>品牌</th><th>系列</th><th>代号</th><th>移植包</th></tr></thead>
         <tbody id="models-body"></tbody>
       </table>
     </div>
@@ -449,11 +448,6 @@ function editPort(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function delPort(id) {
-  if (!confirm('删除这条移植包记录？')) return
-  return run(async () => { await api('/api/admin/port/delete', { id }); await loadAll() })
-}
-
 /* ---------------- 列表 ---------------- */
 const KIND = { pan123: '123云盘直链', share123: '123云盘', pan139: '移动云盘', panBaidu: '百度网盘', panAli: '阿里云盘', pan189: '天翼云盘', panLanzou: '蓝奏云', shareOther: '网盘', manual: '手动' }
 
@@ -479,7 +473,6 @@ function renderPorts() {
       <td>${links.join('<br>') || '<span class="muted">无</span>'}</td>
       <td style="white-space:nowrap">
         <button class="ghost mini" onclick="editPort('${p.id}')">编辑</button>
-        <button class="danger mini" onclick="delPort('${p.id}')">删除</button>
       </td>
     </tr>`
   }).join('') || '<tr><td colspan="8" class="muted">没有匹配的移植包</td></tr>'
@@ -492,8 +485,7 @@ function renderModels() {
     <tr>
       <td>${esc(m.name)}</td><td>${esc(m.brand || '-')}</td><td>${esc(m.series || '-')}</td>
       <td>${esc(m.code || '-')}</td><td>${m.portCount || 0}</td>
-      <td><button class="danger mini" onclick="delModel('${m.id}')">删除</button></td>
-    </tr>`).join('') || '<tr><td colspan="6" class="muted">暂无机型</td></tr>'
+    </tr>`).join('') || '<tr><td colspan="5" class="muted">暂无机型</td></tr>'
 }
 
 function addModel() { return run(async () => {
@@ -501,11 +493,6 @@ function addModel() { return run(async () => {
   $('m-name').value = ''; $('m-code').value = ''
   await loadAll()
 }) }
-
-function delModel(id) {
-  if (!confirm('删除该机型？它名下的官方包记录会一起删掉。')) return
-  return run(async () => { await api('/api/admin/model/delete', { id }); await loadAll() })
-}
 
 /* ---------------- 其它 ---------------- */
 async function syncPan() {

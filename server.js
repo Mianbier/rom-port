@@ -432,7 +432,7 @@ const server = http.createServer(async (req, res) => {
       return data
     }
     if (pathname === '/api/feed' && req.method === 'GET') {
-      return sendJson(res, 200, await hfCached('feed', () => hyperfans.buildFeed(), 5 * 60 * 1000))
+      return sendJson(res, 200, await hfCached('feed', () => hyperfans.buildFeed(), 60 * 1000))
     }
     if (pathname === '/api/schedule' && req.method === 'GET') {
       if (query.week) return sendJson(res, 200, await hfCached('week:' + query.week, () => hyperfans.getWeek(query.week)))

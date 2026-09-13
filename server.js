@@ -914,16 +914,17 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/status-sync' && req.method === 'POST') {
       const body = await readBody(req)
       const items = Array.isArray(body.items) ? body.items : []
+      let ov = {}
+      try { ov = JSON.parse((await store.getKv('statusOverride')) || '{}') } catch (err) { ov = {} }
       let count = 0
       for (const it of items) {
-        if (it && it.version && it.status) {
-          await store.setStatusOverride(String(it.version), String(it.status), String(it.note || ''))
-          count++
-        }
+        if (!it || !it.version || !it.status) continue
+        ov[String(it.version)] = { status: String(it.status), note: String(it.note || '') }
+        try { await store.setStatusOverride(String(it.version), String(it.status), String(it.note || '')) } catch (err) { /* 表可选 */ }
+        count++
       }
-      const total = Object.keys(await store.getStatusOverrides()).length
-      return sendJson(res, 200, { ok: true, total, written: count })
-    }
+      try { await store.setKv('statusOverride', JSON.stringify(ov)) } catch (err) { /* kv 可选 */ }
+      return sendJson(res, 200, { ok: true, total: Object.keys(ov).length, written: count })
     }
 
     // 投稿页「解析」按钮

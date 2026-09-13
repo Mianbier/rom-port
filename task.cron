@@ -2,3 +2,6 @@
 # 每 20 分钟刷一批 30 台「最久没更新」的机型 → 约 2 小时把所有机型轮一遍
 # token 用 config.js 里的 adminToken（如需修改，这里同步改）
 */20 * * * * curl -s "http://127.0.0.1:80/api/admin/refresh?token=change-this-to-a-random-token&limit=30" > /tmp/cron-refresh.log 2>&1
+
+# 每分钟预热动态列表（内存缓存永远是热的，用户打开秒出）
+* * * * * curl -s -o /dev/null http://127.0.0.1:80/api/feed

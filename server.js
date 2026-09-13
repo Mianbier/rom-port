@@ -409,10 +409,23 @@ const server = http.createServer(async (req, res) => {
       const items = Array.isArray(body.items) ? body.items : []
       let ov = {}
       try { ov = JSON.parse((await store.getKv('statusOverride')) || '{}') } catch (err) { ov = {} }
+      const base = body.baseDate || new Date().toISOString().slice(0, 10)
+      const shift = (days) => {
+        const d = new Date(base)
+        d.setDate(d.getDate() - days)
+        return d.toISOString().slice(0, 10)
+      }
       let count = 0
       for (const it of items) {
         if (!it || !it.version || !it.status) continue
-        ov[String(it.version)] = { status: String(it.status), note: String(it.note || '') }
+        const note = String(it.note || '')
+        const rec = { status: String(it.status), note }
+        // 「今天是内测/测试的第 N 天」→ 反推起始日存档，之后每天自动递增
+        const m = note.match(/第\s*(\d+)\s*天/)
+        if (m && (rec.status === 'internal' || rec.status === 'beta')) {
+          rec.since = it.since || shift(parseInt(m[1], 10) - 1)
+        }
+        ov[String(it.version)] = rec
         try { await store.setStatusOverride(String(it.version), String(it.status), String(it.note || '')) } catch (err) { /* 表可选 */ }
         count++
       }

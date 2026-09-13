@@ -15,6 +15,7 @@ const wechat = require('./lib/wechat')
 const notify = require('./lib/notify')
 const pan123 = require('./lib/pan123')
 const shareLink = require('./lib/share-link')
+const hyperfans = require('./lib/hyperfans')
 const hyperos = require('./lib/hyperos')
 
 const ADMIN_HTML = path.join(__dirname, 'public', 'admin.html')
@@ -415,6 +416,27 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/updates' && req.method === 'GET') {
       return sendJson(res, 200, Object.assign({ ok: true }, await store.getUpdates()))
+    }
+
+    // ===== hyperos.fans 数据：动态（新版本流）+ 开发版每周公告（时间表）=====
+    // 30 分钟 kv 缓存；?fresh=1 强制刷新
+    async function hfCached(key, fn) {
+      const at = Number(await store.getKv('hf:' + key + 'At')) || 0
+      if (!query.fresh && Date.now() - at < 30 * 60 * 1000) {
+        const cached = await store.getKv('hf:' + key)
+        if (cached) return JSON.parse(cached)
+      }
+      const data = await fn()
+      await store.setKv('hf:' + key, JSON.stringify(data))
+      await store.setKv('hf:' + key + 'At', String(Date.now()))
+      return data
+    }
+    if (pathname === '/api/feed' && req.method === 'GET') {
+      return sendJson(res, 200, await hfCached('feed', () => hyperfans.buildFeed()))
+    }
+    if (pathname === '/api/schedule' && req.method === 'GET') {
+      if (query.week) return sendJson(res, 200, await hfCached('week:' + query.week, () => hyperfans.getWeek(query.week)))
+      return sendJson(res, 200, await hfCached('sched', () => hyperfans.getSchedule()))
     }
 
     // 对外公开的运行配置（供小程序拉取订阅模板 ID 等，不含任何密钥）

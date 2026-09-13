@@ -910,8 +910,10 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, id })
     }
 
-    // 人工状态校正：批量写入「版本号 → 状态/备注」（对齐澎湃更新标注）
+
+    // 人工状态校正：批量写入「版本号 → 状态/备注」（对齐澎湃更新标注）。自带 token 校验。
     if (pathname === '/api/admin/status-sync' && req.method === 'POST') {
+      if (req.headers['x-admin-token'] !== config.adminToken) return sendJson(res, 401, { ok: false, error: '管理令牌不正确' })
       const body = await readBody(req)
       const items = Array.isArray(body.items) ? body.items : []
       let ov = {}

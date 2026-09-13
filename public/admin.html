@@ -197,6 +197,12 @@
   </section>
 
   <!-- ===================== 折叠区 ===================== -->
+    <details>
+    <summary>状态校正（对齐澎湃更新标注）</summary>
+    <p class="muted">一行一条，格式：版本号 状态 备注（状态=公开/内测/Beta/撤包）。示例：<br>OS3.0.317.0.WAACNXM 内测 今天是内测的第3天</p>
+    <textarea id="status-text" rows="6" style="width:100%;font-family:monospace"></textarea>
+    <button onclick="syncStatus()">同步状态</button>
+  </details>
   <details>
     <summary>123 云盘同步（把云盘目录里的文件同步成移植包记录）</summary>
     <div class="body">
@@ -495,7 +501,16 @@ function addModel() { return run(async () => {
 }) }
 
 /* ---------------- 其它 ---------------- */
-async function syncPan() {
+async async function syncStatus() { return run(async () => {
+  const lines = $('status-text').value.split('\n').map(l => l.trim()).filter(Boolean)
+  const items = lines.map(l => { const p = l.split(/\s+/); return { version: p[0], status: p[1], note: p.slice(2).join(' ') } })
+    .filter(it => it.version && it.status)
+  const d = await api('/api/admin/status-sync', { items })
+  $('status-text').value = ''
+  flash('已同步状态，共 ' + d.total + ' 条')
+}) }
+
+  function syncPan() {
   $('syncBtn').disabled = true
   $('log').textContent = '开始同步 123 云盘…'
   return run(async () => {

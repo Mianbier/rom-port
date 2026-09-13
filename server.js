@@ -910,6 +910,17 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, id })
     }
 
+    // 人工状态校正：批量写入「版本号 → 状态/备注」（对齐澎湃更新标注）
+    if (pathname === '/api/admin/status-sync' && req.method === 'POST') {
+      const body = await readBody(req)
+      const items = Array.isArray(body.items) ? body.items : []
+      let ov = {}
+      try { ov = JSON.parse((await store.getKv('statusOverride')) || '{}') } catch (e) {}
+      items.forEach(function (it) { if (it && it.version && it.status) ov[String(it.version)] = { status: String(it.status), note: String(it.note || '') } })
+      await store.setKv('statusOverride', JSON.stringify(ov))
+      return sendJson(res, 200, { ok: true, total: Object.keys(ov).length })
+    }
+
     // 投稿页「解析」按钮
     if (pathname === '/api/submit/probe' && req.method === 'POST') {
       if (!(await isSubmitter(req))) return sendJson(res, 401, { ok: false, error: '投稿口令不正确' })

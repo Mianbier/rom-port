@@ -459,7 +459,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/schedule' && req.method === 'GET') {
       if (query.week) return sendJson(res, 200, await hfCached('week:' + query.week, () => hyperfans.getWeek(query.week)))
-      return sendJson(res, 200, await hfCached('sched', () => hyperfans.buildUpgradeSchedule()))
+      return sendJson(res, 200, await hfCached('sched', () => hyperfans.buildUpgradeSchedule(), 60 * 1000))
     }
 
     // 对外公开的运行配置（供小程序拉取订阅模板 ID 等，不含任何密钥）

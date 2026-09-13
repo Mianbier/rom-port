@@ -420,9 +420,9 @@ const server = http.createServer(async (req, res) => {
 
     // ===== hyperos.fans 数据：动态（新版本流）+ 开发版每周公告（时间表）=====
     // 30 分钟 kv 缓存；?fresh=1 强制刷新
-    async function hfCached(key, fn) {
+    async function hfCached(key, fn, ttl) {
       const at = Number(await store.getKv('hf:' + key + 'At')) || 0
-      if (!query.fresh && Date.now() - at < 30 * 60 * 1000) {
+      if (!query.fresh && Date.now() - at < (ttl || 30 * 60 * 1000)) {
         const cached = await store.getKv('hf:' + key)
         if (cached) return JSON.parse(cached)
       }
@@ -432,7 +432,7 @@ const server = http.createServer(async (req, res) => {
       return data
     }
     if (pathname === '/api/feed' && req.method === 'GET') {
-      return sendJson(res, 200, await hfCached('feed', () => hyperfans.buildFeed()))
+      return sendJson(res, 200, await hfCached('feed', () => hyperfans.buildFeed(), 5 * 60 * 1000))
     }
     if (pathname === '/api/schedule' && req.method === 'GET') {
       if (query.week) return sendJson(res, 200, await hfCached('week:' + query.week, () => hyperfans.getWeek(query.week)))

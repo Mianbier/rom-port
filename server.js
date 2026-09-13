@@ -447,7 +447,15 @@ const server = http.createServer(async (req, res) => {
       return data
     }
     if (pathname === '/api/feed' && req.method === 'GET') {
-      return sendJson(res, 200, await hfCached('feed', () => hyperfans.buildFeed(), 60 * 1000))
+      // 全量 2 万+条太大（~2MB）会撑爆 callContainer 通道 → 分页：默认 60 天，?before=日期 往更早翻
+      const full = await hfCached('feed', () => hyperfans.buildFeed(), 60 * 1000)
+      const days = Math.min(180, Math.max(7, parseInt(query.days, 10) || 60))
+      let groups = full.groups || []
+      if (query.before) groups = groups.filter((g) => g.date < query.before)
+      groups = groups.slice(0, days)
+      const last = groups.length ? groups[groups.length - 1].date : ''
+      const hasMore = !!(last && (full.groups || []).some((g) => g.date < last))
+      return sendJson(res, 200, { ok: true, time: full.time, groups, hasMore })
     }
     if (pathname === '/api/schedule' && req.method === 'GET') {
       if (query.week) return sendJson(res, 200, await hfCached('week:' + query.week, () => hyperfans.getWeek(query.week)))

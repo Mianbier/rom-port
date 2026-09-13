@@ -90,6 +90,7 @@ async function currentFieldMap() {
 
 /* ---------------- hyperos 官方数据刷新 ---------------- */
 
+const hfMemCache = {} // hyperos.fans 接口的内存缓存
 const REFRESH_TTL = 30 * 60 * 1000 // 30 分钟：机型数据超过这个时间没更新就自动刷新（官方出新包 30 分钟内可见）
 const refreshing = new Set() // 正在刷新的机型（防止并发重复抓）
 
@@ -420,15 +421,29 @@ const server = http.createServer(async (req, res) => {
 
     // ===== hyperos.fans 数据：动态（新版本流）+ 开发版每周公告（时间表）=====
     // 30 分钟 kv 缓存；?fresh=1 强制刷新
+    // 内存缓存 + kv 双层：feed 全量 JSON 超过 kv TEXT 上限（64KB），写入失败时只靠内存层
+    const mem = hfMemCache
     async function hfCached(key, fn, ttl) {
+      const m = mem[key]
+      if (!query.fresh && m && Date.now() - m.at < (ttl || 30 * 60 * 1000)) return m.data
       const at = Number(await store.getKv('hf:' + key + 'At')) || 0
-      if (!query.fresh && Date.now() - at < (ttl || 30 * 60 * 1000)) {
+      if (!query.fresh && m && at && Date.now() - at < (ttl || 30 * 60 * 1000) && m.at >= at) return m.data
+      if (!query.fresh && !m) {
         const cached = await store.getKv('hf:' + key)
-        if (cached) return JSON.parse(cached)
+        if (cached) {
+          try {
+            const d = JSON.parse(cached)
+            mem[key] = { at: Date.now(), data: d }
+            return d
+          } catch (e) {}
+        }
       }
       const data = await fn()
-      await store.setKv('hf:' + key, JSON.stringify(data))
-      await store.setKv('hf:' + key + 'At', String(Date.now()))
+      mem[key] = { at: Date.now(), data }
+      try {
+        await store.setKv('hf:' + key, JSON.stringify(data))
+        await store.setKv('hf:' + key + 'At', String(Date.now()))
+      } catch (e) { /* 超长的（feed 全量）只用内存缓存 */ }
       return data
     }
     if (pathname === '/api/feed' && req.method === 'GET') {
